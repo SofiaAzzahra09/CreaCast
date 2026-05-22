@@ -1,0 +1,467 @@
+<!-- templates/model_management/index.html -->
+<!-- templates/model_management/index.html -->
+{% extends "base.html" %}
+
+{% block content %}
+
+<style>
+/* =========================
+   Modal Fix
+========================= */
+.modal {
+    z-index: 1060;
+}
+
+.modal-backdrop {
+    z-index: 1055;
+}
+
+body.modal-open {
+    overflow: hidden;
+    padding-right: 0 !important;
+}
+
+/* =========================
+   Action Button Layout
+========================= */
+.action-group {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+</style>
+
+<div class="page-header">
+    <h1>Model Management</h1>
+    <p>Kelola versi model prediksi</p>
+</div>
+
+{% with messages = get_flashed_messages(with_categories=true) %}
+    {% if messages %}
+        {% for category, message in messages %}
+            <div class="alert alert-{{ category if category != 'danger' else 'danger' }}">
+                {{ message }}
+            </div>
+        {% endfor %}
+    {% endif %}
+{% endwith %}
+
+<ul class="nav nav-tabs custom-tabs mb-3">
+    <li class="nav-item">
+        <a class="nav-link {% if active_tab == 'models' %}active{% endif %}" href="?tab=models">
+            Daftar Model
+        </a>
+    </li>
+    <li class="nav-item">
+        <a class="nav-link {% if active_tab == 'retrain' %}active{% endif %}" href="?tab=retrain">
+            Retrain Model
+        </a>
+    </li>
+</ul>
+
+<!-- =========================================================
+     TAB MODELS
+========================================================= -->
+{% if active_tab == "models" %}
+
+<div class="card">
+    <div class="table-wrapper">
+        <table class="custom-table">
+            <thead>
+                <tr>
+                    <th>Versi</th>
+                    <th>Tanggal</th>
+                    <th>RMSE</th>
+                    <th>MAE</th>
+                    <th>R²</th>
+                    <th>Status</th>
+                    <th style="width:240px;">Aksi</th>
+                </tr>
+            </thead>
+
+            <tbody>
+                {% if data %}
+                    {% for row in data %}
+                    {% set safe_id = row.versi|replace('.', '_') %}
+
+                    <tr>
+                        <td>{{ row.versi }}</td>
+                        <td>{{ row.tanggal_training }}</td>
+                        <td>{{ "%.2f"|format(row.rmse) }}</td>
+                        <td>{{ "%.2f"|format(row.mae) }}</td>
+                        <td>{{ "%.4f"|format(row.r2) }}</td>
+
+                        <td>
+                            {% if row.status.lower() == "aktif" %}
+                                <span class="badge bg-success">Aktif</span>
+                            {% else %}
+                                <span class="badge bg-secondary">Nonaktif</span>
+                            {% endif %}
+                        </td>
+
+                        <td>
+                            <div class="action-group">
+
+                                {% if row.status.lower() == "aktif" %}
+                                    <button
+                                        type="button"
+                                        class="btn btn-secondary"
+                                        data-bs-toggle="modal"
+                                        data-bs-target="#modalDeactivate{{ safe_id }}"
+                                        style="width:110px;"
+                                    >
+                                        Nonaktifkan
+                                    </button>
+                                {% else %}
+                                    <button
+                                        type="button"
+                                        class="btn btn-primary text-white"
+                                        data-bs-toggle="modal"
+                                        data-bs-target="#modalActivate{{ safe_id }}"
+                                        style="width:110px;"
+                                    >
+                                        Aktifkan
+                                    </button>
+                                {% endif %}
+
+                                <button
+                                    type="button"
+                                    class="btn btn-danger"
+                                    data-bs-toggle="modal"
+                                    data-bs-target="#modalDelete{{ safe_id }}"
+                                    style="width:80px;"
+                                >
+                                    Hapus
+                                </button>
+
+                            </div>
+                        </td>
+                    </tr>
+
+                    {% endfor %}
+                {% else %}
+                    <tr>
+                        <td colspan="7" class="empty-table">
+                            Belum ada model tersimpan
+                        </td>
+                    </tr>
+                {% endif %}
+            </tbody>
+
+        </table>
+    </div>
+</div>
+
+<!-- =========================================================
+     ALL MODALS (DIPINDAHKAN KE LUAR TABLE)
+========================================================= -->
+{% if data %}
+    {% for row in data %}
+    {% set safe_id = row.versi|replace('.', '_') %}
+
+    <!-- =========================
+         MODAL DEACTIVATE
+    ========================== -->
+    <div
+        class="modal fade"
+        id="modalDeactivate{{ safe_id }}"
+        tabindex="-1"
+        aria-hidden="true"
+    >
+        <div class="modal-dialog modal-dialog-centered modal-sm">
+            <div class="modal-content">
+
+                <div class="modal-header border-0 pb-0">
+                    <h5 class="modal-title text-secondary fw-bold">
+                        Nonaktifkan Model?
+                    </h5>
+
+                    <button
+                        type="button"
+                        class="btn-close"
+                        data-bs-dismiss="modal"
+                    ></button>
+                </div>
+
+                <div class="modal-body pt-2">
+                    <p style="font-size:14px;">
+                        Apakah Anda yakin ingin menonaktifkan model versi
+                        <strong>{{ row.versi }}</strong>?
+                    </p>
+                </div>
+
+                <div class="modal-footer border-0 pt-0">
+                    <button
+                        type="button"
+                        class="btn btn-secondary"
+                        data-bs-dismiss="modal"
+                    >
+                        Batal
+                    </button>
+
+                    <form
+                        method="POST"
+                        action="{{ url_for('model_management.deactivate_model', versi=row.versi) }}"
+                    >
+                        <button type="submit" class="btn btn-secondary">
+                            Ya, Nonaktifkan
+                        </button>
+                    </form>
+                </div>
+
+            </div>
+        </div>
+    </div>
+
+    <!-- =========================
+         MODAL ACTIVATE
+    ========================== -->
+    <div
+        class="modal fade"
+        id="modalActivate{{ safe_id }}"
+        tabindex="-1"
+        aria-hidden="true"
+    >
+        <div class="modal-dialog modal-dialog-centered modal-sm">
+            <div class="modal-content">
+
+                <div class="modal-header border-0 pb-0">
+                    <h5 class="modal-title text-success fw-bold">
+                        Aktifkan Model?
+                    </h5>
+
+                    <button
+                        type="button"
+                        class="btn-close"
+                        data-bs-dismiss="modal"
+                    ></button>
+                </div>
+
+                <div class="modal-body pt-2">
+                    <p style="font-size:14px;">
+                        Aktifkan model versi
+                        <strong>{{ row.versi }}</strong>?
+                        Model aktif lainnya akan otomatis dinonaktifkan.
+                    </p>
+                </div>
+
+                <div class="modal-footer border-0 pt-0">
+
+                    <button
+                        type="button"
+                        class="btn btn-secondary"
+                        data-bs-dismiss="modal"
+                    >
+                        Batal
+                    </button>
+
+                    <form
+                        method="POST"
+                        action="{{ url_for('model_management.activate_model', versi=row.versi) }}"
+                    >
+                        <button type="submit" class="btn btn-primary text-white">
+                            Ya, Aktifkan
+                        </button>
+                    </form>
+
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- =========================
+         MODAL DELETE
+    ========================== -->
+    <div
+        class="modal fade"
+        id="modalDelete{{ safe_id }}"
+        tabindex="-1"
+        aria-hidden="true"
+    >
+        <div class="modal-dialog modal-dialog-centered modal-sm">
+            <div class="modal-content">
+
+                <div class="modal-header border-0 pb-0">
+                    <h5 class="modal-title text-danger fw-bold">
+                        Hapus Model?
+                    </h5>
+
+                    <button
+                        type="button"
+                        class="btn-close"
+                        data-bs-dismiss="modal"
+                    ></button>
+                </div>
+
+                <div class="modal-body pt-2">
+                    <p style="font-size:14px;">
+                        PERINGATAN:
+                        Model versi <strong>{{ row.versi }}</strong>
+                        akan dihapus permanen.
+                    </p>
+
+                    <p style="font-size:13px; margin-bottom:0;">
+                        Model berstatus <strong>Aktif</strong>
+                        dilindungi sistem dan tidak dapat dihapus.
+                    </p>
+                </div>
+
+                <div class="modal-footer border-0 pt-0">
+
+                    <button
+                        type="button"
+                        class="btn btn-secondary"
+                        data-bs-dismiss="modal"
+                    >
+                        Batal
+                    </button>
+
+                    <form
+                        method="POST"
+                        action="{{ url_for('model_management.delete_model', versi=row.versi) }}"
+                    >
+                        <button type="submit" class="btn btn-danger">
+                            Ya, Hapus
+                        </button>
+                    </form>
+
+                </div>
+            </div>
+        </div>
+    </div>
+
+    {% endfor %}
+{% endif %}
+
+{% endif %}
+
+<!-- =========================================================
+     TAB RETRAIN
+========================================================= -->
+{% if active_tab == "retrain" %}
+
+<div class="card">
+    <form
+        method="POST"
+        action="{{ url_for('model_management.retrain_model') }}"
+        id="retrain-form"
+    >
+
+        <div class="form-group">
+            <label>Model Referensi</label>
+
+            <select name="model_ref" class="form-select" required>
+                {% if model_aktif %}
+                    {% for versi in model_aktif %}
+                        <option value="{{ versi }}">
+                            {{ versi }}
+                        </option>
+                    {% endfor %}
+                {% else %}
+                    <option value="" disabled selected>
+                        Tidak ada model aktif
+                    </option>
+                {% endif %}
+            </select>
+        </div>
+
+        <div class="form-group">
+            <label>Catatan Training Baru</label>
+
+            <input
+                type="text"
+                name="catatan"
+                class="form-control"
+                placeholder="Misal: Retrain menggunakan data terbaru Mei 2026"
+            >
+        </div>
+
+        <button
+            type="submit"
+            class="btn btn-primary text-white"
+            id="retrain-submit-btn"
+        >
+            <span id="retrain-btn-text">
+                Mulai Retrain
+            </span>
+
+            <span
+                id="retrain-btn-loading"
+                class="spinner-border spinner-border-sm d-none"
+                role="status"
+            ></span>
+        </button>
+
+    </form>
+</div>
+
+<!-- Loading Overlay -->
+<div
+    id="loading-overlay-retrain"
+    class="modal-backdrop fade"
+    style="
+        display:none;
+        background:rgba(0,0,0,0.6);
+        justify-content:center;
+        align-items:center;
+        z-index:9999;
+        position:fixed;
+        top:0;
+        left:0;
+        width:100vw;
+        height:100vh;
+    "
+>
+    <div
+        class="card text-center p-4"
+        style="
+            width:300px;
+            border-radius:18px;
+            background:white;
+        "
+    >
+        <div
+            class="spinner-border text-primary mx-auto"
+            style="width:3.5rem; height:3.5rem;"
+        ></div>
+
+        <p class="mt-3 fw-bold" style="font-size:16px;">
+            Training Model Baru...
+        </p>
+
+        <p style="font-size:12px; color:#6b7280;">
+            Mesin XGBoost sedang memproses feature engineering.
+        </p>
+    </div>
+</div>
+
+<script>
+const retrainForm = document.getElementById("retrain-form");
+
+if (retrainForm) {
+    retrainForm.addEventListener("submit", function () {
+
+        const overlay = document.getElementById("loading-overlay-retrain");
+
+        overlay.style.display = "flex";
+
+        setTimeout(() => {
+            overlay.classList.add("show");
+        }, 10);
+
+        document.getElementById("retrain-submit-btn").disabled = true;
+
+        document
+            .getElementById("retrain-btn-loading")
+            .classList.remove("d-none");
+
+        document
+            .getElementById("retrain-btn-text")
+            .innerText = "Processing...";
+    });
+}
+</script>
+
+{% endif %}
+
+{% endblock %}

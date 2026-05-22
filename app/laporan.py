@@ -1,4 +1,4 @@
-# pages/laporan_page.py
+# app/laporan.py
 import streamlit as st
 
 class LaporanPage:
@@ -44,7 +44,7 @@ class LaporanPage:
                     mime = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
                     nama = "creatroka_prediksi.xlsx"
 
-                self.rs.simpan_riwayat(nama, fmt.lower(), len(data)//1024)
+                self.db.save_laporan_history(nama, fmt.lower(), len(data) // 1024)
                 st.success("Laporan berhasil dibuat!")
                 st.download_button(
                     label=f"Download {nama}",

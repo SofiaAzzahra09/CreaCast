@@ -1,0 +1,152 @@
+<!-- templates/optimasi_stok/index.html -->
+{% extends "base.html" %}
+
+{% block content %}
+
+<div class="page-header">
+    <h1>Optimasi Stok</h1>
+
+    <p>
+        Rekomendasi restock berdasarkan hasil prediksi demand
+    </p>
+</div>
+
+<!-- =====================================================
+     FILTER
+===================================================== -->
+
+<div class="card">
+
+    <form method="GET" class="toolbar">
+
+        <div class="form-group">
+            <label>Safety Stock</label>
+
+            <input
+                type="range"
+                name="buffer_stok"
+                min="0"
+                max="20"
+                value="{{ buffer_stok }}"
+                class="form-range"
+                oninput="bufferValue.innerText = this.value"
+            >
+
+            <small>
+                Buffer:
+                <span id="bufferValue">{{ buffer_stok }}</span>
+                eksemplar
+            </small>
+        </div>
+
+        <div class="toolbar-actions">
+
+            <button class="btn btn-primary">
+                Proses
+            </button>
+
+            <a
+                href="{{ url_for('optimasi_stok.download_csv', buffer_stok=buffer_stok) }}"
+                class="btn btn-success"
+            >
+                Download CSV
+            </a>
+
+        </div>
+
+    </form>
+
+</div>
+
+<!-- =====================================================
+     WARNING
+===================================================== -->
+
+{% if warning %}
+
+<div class="alert alert-warning mt-3">
+    {{ warning }}
+</div>
+
+{% endif %}
+
+<!-- =====================================================
+     TABLE
+===================================================== -->
+
+{% if data %}
+
+<div class="card mt-3">
+
+    <div class="table-wrapper">
+
+        <table class="custom-table">
+
+            <thead>
+                <tr>
+                    <th>No</th>
+                    <th>Judul</th>
+                    <th>Kategori</th>
+                    <th>Stok</th>
+                    <th>Demand Prediksi</th>
+                    <th>Stok Rekomendasi</th>
+                    <th>Restock</th>
+                    <th>Status</th>
+                </tr>
+            </thead>
+
+            <tbody>
+
+                {% for row in data %}
+
+                <tr>
+
+                    <td>{{ loop.index }}</td>
+
+                    <td>{{ row.judul }}</td>
+
+                    <td>{{ row.kategori }}</td>
+
+                    <td>{{ row.stok }}</td>
+
+                    <td>{{ row.demand_prediksi|round(0)|int }}</td>
+
+                    <td>{{ row.stok_rekomendasi }}</td>
+
+                    <td>{{ row.restock }}</td>
+
+                    <td>
+
+                        {% if row.status == "Restock Tinggi" %}
+                            <span class="badge bg-danger">
+                                {{ row.status }}
+                            </span>
+
+                        {% elif row.status == "Perlu Dipantau" %}
+                            <span class="badge bg-warning text-dark">
+                                {{ row.status }}
+                            </span>
+
+                        {% else %}
+                            <span class="badge bg-success">
+                                {{ row.status }}
+                            </span>
+                        {% endif %}
+
+                    </td>
+
+                </tr>
+
+                {% endfor %}
+
+            </tbody>
+
+        </table>
+
+    </div>
+
+</div>
+
+{% endif %}
+
+{% endblock %}

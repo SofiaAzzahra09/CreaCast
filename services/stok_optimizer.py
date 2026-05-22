@@ -1,140 +1,248 @@
-# services/stock_optimizer.py
-import math
-import numpy as np
+# services/stok_optimizer.py
 import pandas as pd
+import math
+
 
 class StockOptimizer:
-    """
-    Menghitung safety stock, reorder point, dan jumlah restock
-    berdasarkan output prediksi XGBoost.
-    
-    Referensi: Silver, Pyke & Thomas (2017) — Inventory and Production Management
-    """
 
-    Z_TABLE = {
-        80: 0.84, 85: 1.04, 90: 1.28, 91: 1.34, 92: 1.41,
-        93: 1.48, 94: 1.56, 95: 1.65, 96: 1.75, 97: 1.88,
-        98: 2.05, 99: 2.33
-    }
+    def __init__(self, buffer_stok=5):
+        self.buffer_stok = buffer_stok
 
-    def __init__(self, lead_time_days: int = 7, service_level: int = 95):
-        self.lead_time = lead_time_days
-        self.service_level = service_level
-        self.z = self.Z_TABLE.get(service_level, 1.65)
+    def hitung_rekomendasi(self, stok_sekarang, demand_prediksi):
 
-    def hitung_safety_stock(self, std_demand_mingguan: float) -> int:
-        """
-        Safety Stock = Z × σ_demand × √(lead_time / 7)
-        
-        σ_demand: standar deviasi permintaan mingguan (dari data historis)
-        Z       : z-score sesuai service level yang dipilih
-        """
-        ss = self.z * std_demand_mingguan * math.sqrt(self.lead_time / 7)
-        return math.ceil(ss)
-
-    def hitung_reorder_point(self,
-                              demand_prediksi: float,
-                              std_demand: float) -> int:
-        """
-        ROP = (demand_prediksi / 7) × lead_time + safety_stock
-        
-        Demand prediksi berasal langsung dari output XGBoost
-        """
-        daily_demand = demand_prediksi / 7
-        ss = self.hitung_safety_stock(std_demand)
-        rop = math.ceil(daily_demand * self.lead_time + ss)
-        return rop
-
-    def hitung_restock(self,
-                        stok_sekarang: int,
-                        demand_prediksi: float,
-                        std_demand: float) -> dict:
-        # =============================
-        # HANDLE NULL / NAN (WAJIB)
-        # =============================
         demand_prediksi = demand_prediksi if pd.notna(demand_prediksi) else 0
-        std_demand = std_demand if pd.notna(std_demand) else 0
 
-        
-        """
-        Menghitung semua komponen rekomendasi stok untuk satu buku.
-        Mengembalikan dict lengkap untuk ditampilkan di UI.
-        """
-        ss  = self.hitung_safety_stock(std_demand)
-        rop = self.hitung_reorder_point(demand_prediksi, std_demand)
+        stok_rekomendasi = math.ceil(
+            demand_prediksi + self.buffer_stok
+        )
 
-        # Jumlah restock = yang dibutuhkan untuk memenuhi prediksi demand
-        # + buffer sampai reorder point berikutnya
-        jumlah_restock = max(0, rop + demand_prediksi - stok_sekarang)
+        restock = max(0, stok_rekomendasi - stok_sekarang)
 
-        if stok_sekarang < ss:
-            status = 'kritis'
-        elif stok_sekarang < rop:
-            status = 'menipis'
+        if stok_sekarang < demand_prediksi:
+            status = "Restock Tinggi"
+        elif stok_sekarang < stok_rekomendasi:
+            status = "Perlu Dipantau"
         else:
-            status = 'aman'
-
-        if demand_prediksi == 0:
-            cukup_minggu = 0
-        else:
-            cukup_minggu = round(stok_sekarang / (demand_prediksi / 7), 1)
+            status = "Aman"
 
         return {
-            'safety_stock':     ss,
-            'reorder_point':    rop,
-            'jumlah_restock':   math.ceil(jumlah_restock),
-            'status':           status,
-            'cukup_minggu':     cukup_minggu
-            # 'cukup_minggu':     round(stok_sekarang / (demand_prediksi / 7), 1)
+            "stok_rekomendasi": stok_rekomendasi,
+            "restock": restock,
+            "status": status
         }
 
-    def hitung_semua(self,
-                      df_buku: pd.DataFrame,
-                      df_prediksi: pd.DataFrame,
-                      df_historis: pd.DataFrame) -> pd.DataFrame:
-        """
-        Menghitung rekomendasi stok untuk semua buku sekaligus.
-        
-        df_buku    : kolom [id_buku, judul, stok, kategori]
-        df_prediksi: output XGBoost — kolom [id_buku, demand_prediksi]
-        df_historis: kolom [id_buku, minggu_ke, jumlah_terjual]
-        """
-        # Hitung std demand per buku dari data historis
-        std_per_buku = (df_historis
-                        .groupby('id_buku')['jumlah_terjual']
-                        .std()
-                        .reset_index()
-                        .rename(columns={'jumlah_terjual': 'std_demand'}))
+    # defhitung_semua(self, df_buku, df_prediksi):
 
-        df = (df_buku
-              .merge(df_prediksi, on='id_buku', how='left')
-              .merge(std_per_buku, on='id_buku', how='left'))
+    #     df = df_buku.merge(
+    #         df_prediksi,
+    #         left_on="id",
+    #         right_on="id_buku",
+    #         how="left"
+    #     )
+    #     df["demand_prediksi"] = df["demand_prediksi"].fillna(0)
 
-        results = []
-        # for _, row in df.iterrows():
-        #     r = self.hitung_restock(
-        #         stok_sekarang=row['stok'],
-        #         demand_prediksi=row['demand_prediksi'],
-        #         std_demand=row['std_demand']
-        #     )
-        #     results.append({**row.to_dict(), **r})
+    #     hasil = []
+
+    #     for _, row in df.iterrows():
+
+    #         rekom = self.hitung_rekomendasi(
+    #             row["stok"],
+    #             row["demand_prediksi"]
+    #         )
+
+    #         hasil.append({
+    #             **row.to_dict(),
+    #             **rekom
+    #         })
+
+    #     return pd.DataFrame(hasil)
+
+    def hitung_semua(self, df_buku, df_prediksi):
+        df_buku["id"] = pd.to_numeric(
+            df_buku["id"],
+            errors="coerce"
+        )
+
+        df_prediksi["id_buku"] = pd.to_numeric(
+            df_prediksi["id_buku"],
+            errors="coerce"
+        )
+
+        # buang data invalid
+        df_prediksi = df_prediksi.dropna(subset=["id_buku"])
+
+        # ubah ke integer
+        df_buku["id"] = df_buku["id"].astype(int)
+        df_prediksi["id_buku"] = df_prediksi["id_buku"].astype(int)
+
+        # ==========================
+        # MERGE
+        # ==========================
+        df = df_buku.merge(
+            df_prediksi,
+            left_on="id",
+            right_on="id_buku",
+            how="left"
+        )
+
+        df["demand_prediksi"] = df["demand_prediksi"].fillna(0)
+
+        hasil = []
 
         for _, row in df.iterrows():
-            demand_prediksi = row['demand_prediksi']
-            std_demand = row['std_demand']
 
-            # HANDLE NULL / NaN
-            demand_prediksi = demand_prediksi if pd.notna(demand_prediksi) else 0
-            std_demand = std_demand if pd.notna(std_demand) else 0
-
-            r = self.hitung_restock(
-                stok_sekarang=row['stok'],
-                demand_prediksi=demand_prediksi,
-                std_demand=std_demand
+            rekom = self.hitung_rekomendasi(
+                row["stok"],
+                row["demand_prediksi"]
             )
 
-            results.append({**row.to_dict(), **r})
+            hasil.append({
+                **row.to_dict(),
+                **rekom
+            })
 
-        return (pd.DataFrame(results)
-                .sort_values('status', key=lambda s: s.map({'kritis':0,'menipis':1,'aman':2}))
-                .reset_index(drop=True))
+        return pd.DataFrame(hasil)
+
+
+
+
+
+# import math
+# import numpy as np
+# import pandas as pd
+
+# class StockOptimizer:
+#     """
+#     Menghitung safety stock, reorder point, dan jumlah restock
+#     berdasarkan output prediksi XGBoost.
+    
+#     Referensi: Silver, Pyke & Thomas (2017) — Inventory and Production Management
+#     """
+
+#     Z_TABLE = {
+#         80: 0.84, 85: 1.04, 90: 1.28, 91: 1.34, 92: 1.41,
+#         93: 1.48, 94: 1.56, 95: 1.65, 96: 1.75, 97: 1.88,
+#         98: 2.05, 99: 2.33
+#     }
+
+#     def __init__(self, lead_time_days: int = 7, service_level: int = 95):
+#         self.lead_time = lead_time_days
+#         self.service_level = service_level
+#         self.z = self.Z_TABLE.get(service_level, 1.65)
+
+#     def hitung_safety_stock(self, std_demand_mingguan: float) -> int:
+#         """
+#         Safety Stock = Z × σ_demand × √(lead_time / 7)
+        
+#         σ_demand: standar deviasi permintaan mingguan (dari data historis)
+#         Z       : z-score sesuai service level yang dipilih
+#         """
+#         ss = self.z * std_demand_mingguan * math.sqrt(self.lead_time / 7)
+#         return math.ceil(ss)
+
+#     def hitung_reorder_point(self,
+#                               demand_prediksi: float,
+#                               std_demand: float) -> int:
+#         """
+#         ROP = (demand_prediksi / 7) × lead_time + safety_stock
+        
+#         Demand prediksi berasal langsung dari output XGBoost
+#         """
+#         daily_demand = demand_prediksi / 7
+#         ss = self.hitung_safety_stock(std_demand)
+#         rop = math.ceil(daily_demand * self.lead_time + ss)
+#         return rop
+
+#     def hitung_restock(self,
+#                         stok_sekarang: int,
+#                         demand_prediksi: float,
+#                         std_demand: float) -> dict:
+#         # =============================
+#         # HANDLE NULL / NAN (WAJIB)
+#         # =============================
+#         demand_prediksi = demand_prediksi if pd.notna(demand_prediksi) else 0
+#         std_demand = std_demand if pd.notna(std_demand) else 0
+
+        
+#         """
+#         Menghitung semua komponen rekomendasi stok untuk satu buku.
+#         Mengembalikan dict lengkap untuk ditampilkan di UI.
+#         """
+#         ss  = self.hitung_safety_stock(std_demand)
+#         rop = self.hitung_reorder_point(demand_prediksi, std_demand)
+
+#         # Jumlah restock = yang dibutuhkan untuk memenuhi prediksi demand
+#         # + buffer sampai reorder point berikutnya
+#         jumlah_restock = max(0, rop + demand_prediksi - stok_sekarang)
+
+#         if stok_sekarang < ss:
+#             status = 'kritis'
+#         elif stok_sekarang < rop:
+#             status = 'menipis'
+#         else:
+#             status = 'aman'
+
+#         if demand_prediksi == 0:
+#             cukup_minggu = 0
+#         else:
+#             cukup_minggu = round(stok_sekarang / (demand_prediksi / 7), 1)
+
+#         return {
+#             'safety_stock':     ss,
+#             'reorder_point':    rop,
+#             'jumlah_restock':   math.ceil(jumlah_restock),
+#             'status':           status,
+#             'cukup_minggu':     cukup_minggu
+#             # 'cukup_minggu':     round(stok_sekarang / (demand_prediksi / 7), 1)
+#         }
+
+#     def hitung_semua(self,
+#                       df_buku: pd.DataFrame,
+#                       df_prediksi: pd.DataFrame,
+#                       df_historis: pd.DataFrame) -> pd.DataFrame:
+#         """
+#         Menghitung rekomendasi stok untuk semua buku sekaligus.
+        
+#         df_buku    : kolom [id_buku, judul, stok, kategori]
+#         df_prediksi: output XGBoost — kolom [id_buku, demand_prediksi]
+#         df_historis: kolom [id_buku, minggu_ke, jumlah_terjual]
+#         """
+#         # Hitung std demand per buku dari data historis
+#         std_per_buku = (df_historis
+#                         .groupby('id_buku')['jumlah_terjual']
+#                         .std()
+#                         .reset_index()
+#                         .rename(columns={'jumlah_terjual': 'std_demand'}))
+
+#         df = (df_buku
+#               .merge(df_prediksi, on='id_buku', how='left')
+#               .merge(std_per_buku, on='id_buku', how='left'))
+
+#         results = []
+#         # for _, row in df.iterrows():
+#         #     r = self.hitung_restock(
+#         #         stok_sekarang=row['stok'],
+#         #         demand_prediksi=row['demand_prediksi'],
+#         #         std_demand=row['std_demand']
+#         #     )
+#         #     results.append({**row.to_dict(), **r})
+
+#         for _, row in df.iterrows():
+#             demand_prediksi = row['demand_prediksi']
+#             std_demand = row['std_demand']
+
+#             # HANDLE NULL / NaN
+#             demand_prediksi = demand_prediksi if pd.notna(demand_prediksi) else 0
+#             std_demand = std_demand if pd.notna(std_demand) else 0
+
+#             r = self.hitung_restock(
+#                 stok_sekarang=row['stok'],
+#                 demand_prediksi=demand_prediksi,
+#                 std_demand=std_demand
+#             )
+
+#             results.append({**row.to_dict(), **r})
+
+#         return (pd.DataFrame(results)
+#                 .sort_values('status', key=lambda s: s.map({'kritis':0,'menipis':1,'aman':2}))
+#                 .reset_index(drop=True))

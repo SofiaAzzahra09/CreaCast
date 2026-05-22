@@ -1,0 +1,29 @@
+<!-- templates/components/modal_export.html -->
+<div class="modal fade" id="modalExport" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-sm"> <!-- Ukuran kecil agar pas dengan opsi pilihan -->
+        <div class="modal-content">
+            <form method="GET" action="/data-buku/export">
+                <div class="modal-header">
+                    <h5 class="modal-title">Export Data Buku</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="form-group">
+                        <label>Pilih Format File</label>
+                        <select name="format" required>
+                            <option value="excel">Microsoft Excel (.xlsx)</option>
+                            <option value="pdf">Dokumen PDF (.pdf)</option>
+                        </select>
+                    </div>
+                    <p style="font-size: 12px; color: #6b7280; margin-top: -8px;">
+                        *Seluruh data produk buku saat ini akan diunduh sesuai format yang dipilih.
+                    </p>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Batal</button>
+                    <button type="submit" class="btn btn-primary">Unduh File</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>

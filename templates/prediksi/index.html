@@ -1,0 +1,459 @@
+<!-- templates/prediksi/index.html -->
+{% extends "base.html" %}
+
+{% block content %}
+
+<div class="page-header">
+    <h1>Prediksi Permintaan Buku</h1>
+    <p>Forecast permintaan buku menggunakan XGBoost</p>
+</div>
+
+<!-- ALERT -->
+{% with messages = get_flashed_messages(with_categories=true) %}
+    {% if messages %}
+        {% for category, message in messages %}
+            <div class="alert alert-{{ category }}">
+                {{ message }}
+            </div>
+        {% endfor %}
+    {% endif %}
+{% endwith %}
+
+<!-- FORM -->
+<div class="card p-4 mb-4">
+
+    <form method="POST" id="predict-form">
+
+        <div class="row g-3 align-items-end">
+
+            <div class="col-md-3">
+                <label class="form-label">
+                    Prediksi (minggu)
+                </label>
+
+                <select
+                    name="n_weeks"
+                    class="form-select"
+                >
+                    <option value="1"
+                        {% if request.form.get('n_weeks') == '1' %}
+                            selected
+                        {% endif %}
+                    >
+                        1 Minggu
+                    </option>
+
+                    <option value="2"
+                        {% if request.form.get('n_weeks') == '2' %}
+                            selected
+                        {% endif %}
+                    >
+                        2 Minggu
+                    </option>
+
+                    <option value="4"
+                        {% if not request.form.get('n_weeks')
+                        or request.form.get('n_weeks') == '4' %}
+                            selected
+                        {% endif %}
+                    >
+                        4 Minggu
+                    </option>
+
+                    <option value="8"
+                        {% if request.form.get('n_weeks') == '8' %}
+                            selected
+                        {% endif %}
+                    >
+                        8 Minggu
+                    </option>
+
+                </select>
+            </div>
+
+            <div class="col-md-3">
+                <label class="form-label">
+                    Data Historis
+                </label>
+
+                <select
+                    name="hist"
+                    class="form-select"
+                >
+                    <option value="12"
+                        {% if request.form.get('hist') == '12' %}
+                            selected
+                        {% endif %}
+                    >
+                        12 Minggu
+                    </option>
+
+                    <option value="26"
+                        {% if not request.form.get('hist')
+                        or request.form.get('hist') == '26' %}
+                            selected
+                        {% endif %}
+                    >
+                        26 Minggu
+                    </option>
+
+                    <option value="52"
+                        {% if request.form.get('hist') == '52' %}
+                            selected
+                        {% endif %}
+                    >
+                        52 Minggu (1 Tahun)
+                    </option>
+
+                </select>
+            </div>
+
+            <div class="col-md-2">
+
+                <button
+                    type="submit"
+                    class="btn btn-primary w-100"
+                    id="submit-btn"
+                >
+
+                    <span id="btn-text">
+                        Jalankan
+                    </span>
+
+                    <span
+                        id="btn-loading"
+                        class="spinner-border spinner-border-sm d-none"
+                    ></span>
+
+                </button>
+
+            </div>
+
+        </div>
+
+    </form>
+
+</div>
+
+<!-- MODEL -->
+{% if versi_model %}
+
+<div class="alert alert-info">
+    Model aktif:
+    <strong>{{ versi_model }}</strong>
+</div>
+
+{% endif %}
+
+<!-- METRICS -->
+{% if metrics %}
+
+<div class="row g-3 mb-4">
+
+    <div class="col-md-3">
+        <div class="card metric-card p-3">
+            <h6>MSE</h6>
+            <h3>{{ metrics.mse }}</h3>
+        </div>
+    </div>
+
+    <div class="col-md-3">
+        <div class="card metric-card p-3">
+            <h6>RMSE</h6>
+            <h3>{{ metrics.rmse }}</h3>
+        </div>
+    </div>
+
+    <div class="col-md-3">
+        <div class="card metric-card p-3">
+            <h6>MAE</h6>
+            <h3>{{ metrics.mae }}</h3>
+        </div>
+    </div>
+
+    <div class="col-md-3">
+        <div class="card metric-card p-3">
+            <h6>R²</h6>
+            <h3>{{ metrics.r2 }}</h3>
+        </div>
+    </div>
+
+</div>
+
+{% endif %}
+
+<!-- CHART SELALU ADA -->
+<div class="card p-4 mb-4">
+
+    <h5 class="mb-3">
+        Evaluasi Model
+    </h5>
+
+    <div
+        id="forecast-chart"
+        style="
+            width: 100%;
+            height: 400px;
+        "
+    ></div>
+
+</div>
+
+<!-- TABLE -->
+<div class="card p-4">
+
+    <h5 class="mb-3">
+        Hasil Forecast
+    </h5>
+
+    <div class="table-responsive">
+
+        <table class="table table-bordered">
+
+            <thead>
+                <tr>
+                    <th>Nama Variasi</th>
+                    <th>Forecast</th>
+                </tr>
+            </thead>
+
+            <tbody>
+
+                {% if forecast_data %}
+
+                    {% for item in forecast_data %}
+
+                    <tr>
+                        <td>{{ item.nama_variasi }}</td>
+                        <td>{{ item.forecast }}</td>
+                    </tr>
+
+                    {% endfor %}
+
+                {% else %}
+
+                    <tr>
+                        <td colspan="2" class="text-center">
+                            Belum ada hasil forecast
+                        </td>
+                    </tr>
+
+                {% endif %}
+
+            </tbody>
+
+        </table>
+
+    </div>
+
+</div>
+
+<!-- PLOTLY -->
+<script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+
+<script>
+
+document.addEventListener("DOMContentLoaded", function () {
+
+    const chartDiv = document.getElementById("forecast-chart");
+
+    {% if chart_json %}
+
+        // =========================
+        // ADA DATA CHART
+        // =========================
+
+        const chart = JSON.parse('{{ chart_json | safe }}');
+
+        Plotly.newPlot(
+            chartDiv,
+            chart.data,
+            chart.layout,
+            {
+                responsive: true
+            }
+        );
+
+    {% else %}
+
+        // =========================
+        // PLACEHOLDER CHART
+        // =========================
+
+        Plotly.newPlot(
+            chartDiv,
+            [],
+            {
+                title: "Belum Ada Evaluasi Model",
+                xaxis: {
+                    visible: false
+                },
+                yaxis: {
+                    visible: false
+                },
+                annotations: [
+                    {
+                        text: "Silakan jalankan forecasting terlebih dahulu",
+                        xref: "paper",
+                        yref: "paper",
+                        showarrow: false,
+                        font: {
+                            size: 16
+                        }
+                    }
+                ]
+            },
+            {
+                responsive: true
+            }
+        );
+
+    {% endif %}
+
+    // auto resize
+    window.addEventListener("resize", function () {
+
+        Plotly.Plots.resize(chartDiv);
+
+    });
+
+});
+
+</script>
+
+<!-- LOADING OVERLAY -->
+<div
+    id="loading-overlay"
+    class="modal-backdrop fade"
+    style="
+        display: none;
+        background: rgba(0,0,0,0.6);
+        justify-content: center;
+        align-items: center;
+        z-index: 9999;
+        position: fixed;
+        top:0;
+        left:0;
+        width:100vw;
+        height:100vh;
+    "
+>
+
+    <div
+        class="card text-center p-4"
+        style="
+            width: 300px;
+            border-radius: 18px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+            margin-bottom: 0;
+            background: white;
+        "
+    >
+
+        <div
+            class="spinner-border text-primary mx-auto"
+            style="width: 3.5rem; height: 3.5rem;"
+            role="status"
+        ></div>
+
+        <p
+            class="mt-3"
+            style="
+                font-weight: 700;
+                color: #111827;
+                font-size: 16px;
+                margin-bottom: 0;
+            "
+        >
+            Menjalankan Forecasting...
+        </p>
+
+        <p
+            style="
+                font-size: 12px;
+                color: #6b7280;
+                margin-top: 5px;
+                margin-bottom: 0;
+            "
+        >
+            Algoritma XGBoost sedang menghitung prediksi stok mingguan.
+        </p>
+
+    </div>
+
+</div>
+
+<!-- SUBMIT -->
+<script>
+
+const form = document.getElementById("predict-form");
+
+if(form){
+
+    form.addEventListener("submit", function(){
+
+        const overlay =
+            document.getElementById("loading-overlay");
+
+        overlay.style.display = "flex";
+
+        setTimeout(() => {
+
+            overlay.classList.add("show");
+
+        }, 10);
+
+        const submitBtn =
+            document.getElementById("submit-btn");
+
+        if(submitBtn){
+
+            submitBtn.disabled = true;
+
+        }
+
+        const btnLoading =
+            document.getElementById("btn-loading");
+
+        if(btnLoading){
+
+            btnLoading.classList.remove("d-none");
+
+        }
+
+        const btnText =
+            document.getElementById("btn-text");
+
+        if(btnText){
+
+            btnText.innerText = "Processing...";
+
+        }
+
+    });
+
+}
+
+</script>
+
+<!-- HIDE OVERLAY -->
+<script>
+
+window.addEventListener("pageshow", function () {
+
+    const overlay =
+        document.getElementById("loading-overlay");
+
+    if (overlay) {
+
+        overlay.style.display = "none";
+
+        overlay.classList.remove("show");
+
+    }
+
+});
+
+</script>
+
+{% endblock %}

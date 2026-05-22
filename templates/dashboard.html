@@ -1,0 +1,274 @@
+<!-- templates/dashboard.html -->
+{% extends 'base.html' %}
+
+{% block content %}
+
+<!-- Tambahkan FontAwesome jika belum ada di base.html untuk ikon menarik -->
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+
+<div class="page-header mb-4">
+    <h1 class="fw-bold text-dark">Dashboard</h1>
+    <p class="text-muted">
+        <i class="fa-solid fa-chart-line me-2"></i>Ringkasan performa penjualan dan stok yang diperbarui secara real-time.
+    </p>
+</div>
+
+<!-- =====================================================
+     KPI (Saran CSS: gunakan flexbox atau CSS Grid modern)
+===================================================== -->
+<div class="kpi-grid">
+    <div class="card shadow-sm border-0 border-start border-primary border-4">
+        <div class="card-body">
+            <span class="text-muted text-uppercase small font-weight-bold">Total Minggu</span>
+            <h2 class="mt-2 mb-0 font-weight-bold text-dark">{{ total_minggu }}</h2>
+        </div>
+    </div>
+
+    <div class="card shadow-sm border-0 border-start border-success border-4">
+        <div class="card-body">
+            <span class="text-muted text-uppercase small font-weight-bold">Total Penjualan</span>
+            <h2 class="mt-2 mb-0 font-weight-bold text-success">{{ total_penjualan }}</h2>
+        </div>
+    </div>
+
+    <div class="card shadow-sm border-0 border-start border-info border-4">
+        <div class="card-body">
+            <span class="text-muted text-uppercase small font-weight-bold">Rata-rata Penjualan</span>
+            <h2 class="mt-2 mb-0 font-weight-bold text-info">{{ rata_penjualan }}</h2>
+        </div>
+    </div>
+
+    <div class="card shadow-sm border-0 border-start border-warning border-4">
+        <div class="card-body">
+            <span class="text-muted text-uppercase small font-weight-bold">Total Variasi</span>
+            <h2 class="mt-2 mb-0 font-weight-bold text-warning">{{ total_variasi }}</h2>
+        </div>
+    </div>
+</div>
+
+<!-- =====================================================
+     TREND
+===================================================== -->
+<div class="card shadow-sm border-0 mt-4 p-3">
+    <h3 class="h5 mb-3 text-dark font-weight-bold">
+        <i class="fa-solid fa-arrow-trend-up text-primary me-2"></i>Trend Penjualan
+    </h3>
+    <div style="position: relative; height:300px;">
+        <canvas id="trendChart"></canvas>
+    </div>
+</div>
+
+<!-- =====================================================
+     CHART GRID
+===================================================== -->
+<div class="dashboard-grid mt-4">
+
+    <!-- TOP VARIASI -->
+    <div class="card shadow-sm border-0 p-3">
+        <h3 class="h5 mb-3 text-dark font-weight-bold">
+            <i class="fa-solid fa-crown text-warning me-2"></i>Top Variasi Terlaris
+        </h3>
+        <div style="position: relative; height:250px;">
+            <canvas id="topChart"></canvas>
+        </div>
+    </div>
+
+    <!-- LOW SALES -->
+    <div class="card shadow-sm border-0 p-3">
+        <h3 class="h5 mb-3 text-dark font-weight-bold">
+            <i class="fa-solid fa-triangle-exclamation text-danger me-2"></i>Produk Kurang Laku
+        </h3>
+        <div style="position: relative; height:250px;">
+            <canvas id="lowChart"></canvas>
+        </div>
+    </div>
+
+</div>
+
+<!-- =====================================================
+     DAILY SALES
+===================================================== -->
+<div class="card shadow-sm border-0 mt-4 p-3">
+    <h3 class="h5 mb-3 text-dark font-weight-bold">
+        <i class="fa-solid fa-pie-chart text-info me-2"></i>Distribusi Penjualan Harian
+    </h3>
+    <div style="position: relative; height:300px;" class="d-flex justify-content-center">
+        <canvas id="dailyChart"></canvas>
+    </div>
+</div>
+
+<!-- =====================================================
+     STOK MENIPIS
+===================================================== -->
+<div class="card shadow-sm border-0 mt-4 p-3">
+    <h3 class="h5 mb-3 text-dark font-weight-bold">
+        <i class="fa-solid fa-boxes-stacked text-danger me-2"></i>Peringatan Stok Menipis
+    </h3>
+
+    <div class="table-wrapper table-responsive">
+        <table class="custom-table table table-hover v-align-middle">
+            <thead class="table-light">
+                <tr>
+                    <th scope="col" class="py-3">Judul Produk</th>
+                    <th scope="col" class="py-3 text-center" style="width: 150px;">Sisa Stok</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% if stok_tipis %}
+                    {% for row in stok_tipis %}
+                    <tr>
+                        <td class="py-3 font-weight-bold text-secondary">
+                            {{ row.judul }}
+                        </td>
+                        <td class="py-3 text-center">
+                            <!-- Badge visual penanda stok kritis -->
+                            <span class="badge rounded-pill {% if row.stok <= 5 %}bg-danger{% else %}bg-warning text-dark{% endif %} px-3 py-2">
+                                {{ row.stok }} Pcs
+                            </span>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                {% else %}
+                    <tr>
+                        <td colspan="2" class="empty-table text-center py-5 text-muted">
+                            <i class="fa-solid fa-circle-check text-success fa-2x mb-2 d-block"></i>
+                            Aman! Tidak ada stok yang menipis saat ini.
+                        </td>
+                    </tr>
+                {% endif %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- =====================================================
+     SCRIPT: CHART MODERNIZATION
+===================================================== -->
+<script>
+// Palet warna estetik & modern
+const colors = {
+    blue: { solid: '#4e73df', light: 'rgba(78, 115, 223, 0.1)', hover: '#2e59d9' },
+    green: { solid: '#1cc88a', light: 'rgba(28, 200, 138, 0.1)', hover: '#17a673' },
+    red: { solid: '#e74a3b', light: 'rgba(231, 74, 59, 0.1)', hover: '#be2617' },
+    orange: '#f6c23e',
+    teal: '#36b9cc',
+    purple: '#6f42c1',
+    gray: '#f8f9fc'
+};
+
+// Global Config untuk merapikan font Chart.js
+Chart.defaults.font.family = "'Nunito', 'Segoe UI', Roboto, Helvetica, Arial, sans-serif";
+Chart.defaults.color = '#5a5c69';
+
+// 1. TREND CHART (Line with Smooth Gradient)
+const trendCtx = document.getElementById('trendChart').getContext('2d');
+const trendGradient = trendCtx.createLinearGradient(0, 0, 0, 300);
+trendGradient.addColorStop(0, 'rgba(78, 115, 223, 0.3)');
+trendGradient.addColorStop(1, 'rgba(78, 115, 223, 0)');
+
+new Chart(trendCtx, {
+    type: 'line',
+    data: {
+        labels: {{ trend_labels|tojson }},
+        datasets: [{
+            label: 'Penjualan',
+            data: {{ trend_values|tojson }},
+            borderColor: colors.blue.solid,
+            backgroundColor: trendGradient,
+            fill: true,
+            tension: 0.4,
+            pointBackgroundColor: colors.blue.solid,
+            pointBorderColor: '#fff',
+            pointHoverRadius: 6,
+            pointHoverBackgroundColor: colors.blue.solid,
+        }]
+    },
+    options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: { legend: { display: false } },
+        scales: {
+            x: { grid: { display: false } },
+            y: { grid: { color: 'rgba(0,0,0,0.05)' }, ticks: { beginAtZero: true } }
+        }
+    }
+});
+
+// 2. TOP VARIATION CHART (Bar Chart dengan rounded corner)
+new Chart(document.getElementById('topChart'), {
+    type: 'bar',
+    data: {
+        labels: {{ top_labels|tojson }},
+        datasets: [{
+            label: 'Terjual',
+            data: {{ top_values|tojson }},
+            backgroundColor: colors.green.solid,
+            hoverBackgroundColor: colors.green.hover,
+            borderRadius: 6, // Membuat sudut batang tumpul
+            borderSkipped: false,
+        }]
+    },
+    options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: { legend: { display: false } },
+        scales: {
+            x: { grid: { display: false } },
+            y: { grid: { color: 'rgba(0,0,0,0.05)' } }
+        }
+    }
+});
+
+// 3. LOW SALES CHART
+new Chart(document.getElementById('lowChart'), {
+    type: 'bar',
+    data: {
+        labels: {{ low_labels|tojson }},
+        datasets: [{
+            label: 'Penjualan',
+            data: {{ low_values|tojson }},
+            backgroundColor: colors.red.solid,
+            hoverBackgroundColor: colors.red.hover,
+            borderRadius: 6,
+            borderSkipped: false,
+        }]
+    },
+    options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: { legend: { display: false } },
+        scales: {
+            x: { grid: { display: false } },
+            y: { grid: { color: 'rgba(0,0,0,0.05)' } }
+        }
+    }
+});
+
+// 4. DAILY SALES (Doughnut Chart - Lebih modern daripada Pie biasa)
+new Chart(document.getElementById('dailyChart'), {
+    type: 'doughnut',
+    data: {
+        labels: {{ daily_labels|tojson }},
+        datasets: [{
+            data: {{ daily_values|tojson }},
+            backgroundColor: [colors.blue.solid, colors.green.solid, colors.teal, colors.orange, colors.purple, '#fd7e14', '#20c997'],
+            borderWidth: 2,
+            borderColor: '#ffffff',
+            hoverOffset: 4
+        }]
+    },
+    options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+            legend: {
+                position: 'right',
+                labels: { boxWidth: 15, padding: 15 }
+            }
+        },
+        cutout: '70%' // Membuat bagian tengah lingkaran kosong proporsional
+    }
+});
+</script>
+
+{% endblock %}

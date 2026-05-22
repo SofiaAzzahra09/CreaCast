@@ -1,0 +1,70 @@
+<div class="table-wrapper">
+    <table class="custom-table">
+        <thead>
+            <tr>
+                <th class="col-no" style="width: 50px;">No</th>
+                
+                {% for header in table_config.headers %}
+                    <th style="{{ header.style }}">{{ header.title }}</th>
+                {% endfor %}
+                
+                <th class="col-action" style="width: 220px;">Aksi</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% if data %}
+                {% for row in data %}
+                <tr>
+                    <td>{{ loop.index }}</td>
+                    
+                    {% for col in table_config.columns %}
+                        <td>
+                            {% if col.type == 'currency' %}
+                                Rp {{ "{:,}".format(row[col.key]).replace(",", ".") }}
+                            {% else %}
+                                {{ row[col.key] }}
+                            {% endif %}
+                        </td>
+                    {% endfor %}
+                    
+                    <td>
+                        <div class="action-group">
+                            <button
+                                type="button"
+                                class="btn btn-secondary"
+                                data-bs-toggle="modal"
+                                data-bs-target="#edit{{ row.id }}"
+                            >
+                                Edit
+                            </button>
+
+                            <button
+                                type="button"
+                                class="btn btn-danger"
+                                data-bs-toggle="modal"
+                                data-bs-target="#confirmHapus{{ row.id }}"
+                            >
+                                Hapus
+                            </button>
+                        </div>
+                    </td>
+                </tr>
+
+                {% if table_config.modal_edit_path %}
+                    {% include table_config.modal_edit_path %}
+                {% endif %}
+                {% if table_config.modal_hapus_path %}
+                    {% include table_config.modal_hapus_path %}
+                {% endif %}
+
+                {% endfor %}
+            {% else %}
+                <tr>
+                    <td colspan="{{ table_config.headers|length + 2 }}" class="empty-table">
+                        Tidak ada data
+                    </td>
+                </tr>
+            {% endif %}
+        </tbody>
+    </table>
+</div>

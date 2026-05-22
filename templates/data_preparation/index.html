@@ -1,0 +1,127 @@
+<!-- templates/data_preparation/index.html -->
+{% extends "base.html" %}
+
+{% block content %}
+
+<div class="page-header">
+    <h1>Data Preparation</h1>
+    <p>Upload dan proses data penjualan mingguan</p>
+</div>
+
+{% with messages = get_flashed_messages(with_categories=true) %}
+    {% if messages %}
+        {% for category, message in messages %}
+            <div class="alert alert-{{ category if category != 'error' else 'danger' }}">
+                {{ message }}
+            </div>
+        {% endfor %}
+    {% endif %}
+{% endwith %}
+
+<!-- KARTU PEMROSESAN DATA -->
+<div class="card mb-4">
+    <div class="row g-4">
+        <!-- FORM 1: KHUSUS UPLOAD DATA RAW -->
+        <div class="col-md-7" style="border-right: 1px solid #e5e7eb;">
+            <form method="POST" action="{{ url_for('data_preparation.upload_raw') }}" enctype="multipart/form-data">
+                <div class="d-flex align-items-end gap-3">
+                    <div class="flex-grow-1">
+                        <label class="form-label" style="font-weight: 600;">Upload CSV / Excel (Multifile)</label>
+                        <input 
+                            type="file" 
+                            name="files" 
+                            class="form-control"
+                            accept=".xlsx, .xls, .csv, text/csv, application/vnd.ms-excel, application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" 
+                            multiple 
+                            required
+                        >
+                    </div>
+                    <button type="submit" class="btn btn-secondary text-white" style="height: 42px; min-width: 100px;">
+                        Simpan Raw
+                    </button>
+                </div>
+            </form>
+        </div>
+
+        <!-- FORM 2: KHUSUS EKSEKUSI PIPELINE -->
+        <div class="col-md-5 d-flex align-items-end justify-content-center">
+            <form method="POST" action="{{ url_for('data_preparation.run_pipeline') }}" id="pipeline-form" class="w-100 ps-md-2">
+                <div class="text-center text-md-start mb-2 d-none d-md-block">
+                    <small class="text-muted">Pastikan data transaksi sudah terunggah sebelum memproses pipeline.</small>
+                </div>
+                <button
+                    type="submit"
+                    class="btn btn-primary w-100 text-white" 
+                    id="pipeline-btn"
+                    style="height: 42px; font-weight: 600;"
+                    {% if not has_raw_data %}disabled title="Upload data mentah terlebih dahulu"{% endif %}
+                >
+                    <span id="btn-text">Jalankan Pipeline Fitur Mingguan</span>
+                    <span id="btn-loading" class="spinner-border spinner-border-sm d-none" role="status"></span>
+                </button>
+            </form>
+        </div>
+    </div>
+</div>
+
+<div class="card">
+    <h3 style="color: #111827; font-size: 18px; font-weight: 700; margin-bottom: 16px;">
+        Weekly Sales
+    </h3>
+
+    {% if df_weekly.empty %}
+        <div class="alert alert-danger" style="margin-bottom: 0;">
+            Belum ada data weekly sales yang diproses di database.
+        </div>
+    {% else %}
+        <div class="table-wrapper">
+            <table class="custom-table">
+                <thead>
+                    <tr>
+                        <th class="col-no" style="width: 50px;">No</th>
+                        {% for col in df_weekly.columns %}
+                            <th>{{ col }}</th>
+                        {% endfor %}
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for row in df_weekly.values %}
+                    <tr>
+                        <td>{{ loop.index }}</td>
+                        {% for val in row %}
+                            <td>{{ val if val is not none else '-' }}</td>
+                        {% endfor %}
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    {% endif %}
+</div>
+
+<!-- OVERLAY ANIMASI LOADING -->
+<div id="loading-overlay" class="modal-backdrop fade" style="display: none; background: rgba(0,0,0,0.5); justify-content: center; align-items: center; z-index: 9999; position: fixed; top:0; left:0; width:100vw; height:100vh;">
+    <div class="card text-center p-4" style="width: 280px; border-radius: 18px; box-shadow: 0 10px 30px rgba(0,0,0,0.15); margin-bottom: 0;">
+        <div class="spinner-border text-primary mx-auto" style="width: 3rem; height: 3rem;" role="status"></div>
+        <p class="mt-3" style="font-weight: 600; color: #111827; margin-bottom: 0;" id="overlay-text">
+            Menjalankan pipeline...
+        </p>
+    </div>
+</div>
+
+<script>
+const form = document.getElementById("pipeline-form");
+if(form) {
+    form.addEventListener("submit", function(){
+        const overlay = document.getElementById("loading-overlay");
+        overlay.style.display = "flex";
+        overlay.classList.add("show");
+
+        document.getElementById("pipeline-btn").disabled = true;
+        document.getElementById("btn-loading").classList.remove("d-none");
+        document.getElementById("btn-text").innerText = "Processing Pipeline...";
+    });
+}
+</script>
+
+{% endblock %}

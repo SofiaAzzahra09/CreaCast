@@ -1,0 +1,105 @@
+{% extends "base.html" %}
+
+{% block content %}
+
+<div class="page-header">
+    <h1>Data Buku</h1>
+    <p>Master data produk buku</p>
+</div>
+
+<div class="card">
+    <div class="toolbar">
+        
+        <div class="toolbar-search">
+            <form method="GET" id="searchForm">
+                <input
+                    type="search"
+                    name="search"
+                    id="searchInput"
+                    placeholder="Cari buku..."
+                    value="{{ search }}"
+                    onsearch="handleClearSearch(this)"
+                >
+            </form>
+        </div>
+
+        <div class="toolbar-actions">
+            <button
+                type="button"
+                class="btn btn-primary"
+                data-bs-toggle="modal"
+                data-bs-target="#modalTambah"
+            >
+                Tambah
+            </button>
+
+            <button
+                type="button"
+                class="btn btn-secondary"
+                data-bs-toggle="modal"
+                data-bs-target="#modalImport"
+            >
+                Import
+            </button>
+
+            <button
+                type="button"
+                class="btn btn-secondary"
+                data-bs-toggle="modal"
+                data-bs-target="#modalExport"
+            >
+                Export
+            </button>
+
+            <button 
+                type="button" 
+                class="btn btn-danger"
+                data-bs-toggle="modal" 
+                data-bs-target="#modalReset"
+            >
+                Reset
+            </button>
+        </div>
+
+    </div>
+</div>
+
+<div class="card">
+    {% set table_config = {
+        'headers': [
+            {'title': 'Judul Variasi', 'style': 'width: 200px;'},
+            {'title': 'Nama Produk', 'style': 'width: 300px; max-width: 350px;'},
+            {'title': 'Harga', 'style': 'width: 180px; min-width: 150px;'},
+            {'title': 'Stok', 'style': 'width: 100px;'}
+        ],
+        'columns': [
+            {'key': 'judul', 'type': 'text'},
+            {'key': 'kategori', 'type': 'text'},
+            {'key': 'harga', 'type': 'currency'},
+            {'key': 'stok', 'type': 'text'}
+        ],
+        'modal_edit_path': 'components/modal_edit.html',
+        'modal_hapus_path': 'components/modal_hapus.html'
+    } %}
+
+    {% include "components/table.html" %}
+</div>
+
+{% include "components/modal_tambah.html" %}
+{% include "components/modal_import.html" %}
+{% include "components/modal_export.html" %}
+{% include "components/modal_reset.html" %}
+
+<script>
+/**
+ * Handle otomatis refresh/submit semua data kembali 
+ * saat tombol 'X' pada input search diklik
+ */
+function handleClearSearch(input) {
+    if (input.value === "") {
+        document.getElementById("searchForm").submit();
+    }
+}
+</script>
+
+{% endblock %}

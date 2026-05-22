@@ -1,0 +1,64 @@
+<!-- templates/components/sidebar.html -->
+<div class="sidebar-header">
+
+    <img
+        src="{{ url_for('static', filename='assets/logo_creatroka.jpeg') }}" class="sb-logo">
+
+    <div class="sb-title">
+        Creatroka
+    </div>
+
+    <div class="sb-subtitle">
+        Sistem Prediksi Permintaan Buku
+    </div>
+
+</div>
+
+<hr>
+
+<a href="/dashboard" class="menu-item {% if request.path == '/dashboard' %}active{% endif %}">
+    <img src="{{ url_for('static', filename='assets/dashboard.png') }}" class="menu-icon" alt="Dashboard">
+    Dashboard
+</a>
+
+<a href="/data-buku" class="menu-item {% if request.path == '/data-buku' %}active{% endif %}">
+    <img src="{{ url_for('static', filename='assets/data_buku.png') }}" class="menu-icon" alt="Data Buku">
+    Data Buku
+</a>
+
+<a href="/data-preparation" class="menu-item {% if request.path.startswith('/data-preparation') %}active{% endif %}">
+    <img src="{{ url_for('static', filename='assets/data_processing.png') }}" class="menu-icon" alt="Data Preparation">
+    Data Preparation
+</a>
+
+<a href="/prediksi" class="menu-item {% if request.path.startswith('/prediksi') %}active{% endif %}">
+    <img src="{{ url_for('static', filename='assets/prediction.png') }}" class="menu-icon" alt="Prediksi">
+    Prediksi
+</a>
+
+<a href="/optimasi-stok" class="menu-item {% if request.path.startswith('/optimasi-stok') %}active{% endif %}">
+    <img src="{{ url_for('static', filename='assets/stock.png') }}" class="menu-icon" alt="Optimasi Stok">
+    Optimasi Stok
+</a>
+
+<a href="/model-management" class="menu-item {% if request.path.startswith('/model-management') %}active{% endif %}">
+    <img src="{{ url_for('static', filename='assets/model.png') }}" class="menu-icon" alt="Model Management">
+    Model Management
+</a>
+
+<a href="/profile" class="menu-item {% if request.path.startswith('/profile') %}active{% endif %}">
+    <img src="{{ url_for('static', filename='assets/profile.png') }}" class="menu-icon" alt="Profile">
+    Profile
+</a>
+
+<hr>
+
+<!-- <div class="sb-user">
+    <img src="{{ url_for('static', filename='assets/profile.png') }}" class="menu-icon" alt="User">
+    Login sebagai <b>{{ session.username }}</b>
+</div>
+ -->
+<a href="/logout" class="logout-btn">
+    <img src="{{ url_for('static', filename='assets/out.png') }}" class="menu-icon" alt="Keluar">
+    Keluar
+</a>

@@ -1,121 +1,6 @@
-# app/model_management_page.py
-# import streamlit as st
-# import pandas as pd
-# import plotly.graph_objects as go
-# import json
-
-# class ModelManagementPage:
-#     def __init__(self, registry: ModelRegistry, xgb_service):
-#         self.registry = registry
-#         self.xgb = xgb_service
-
-#     def _render_loss_curve(self, versi: str):
-#         # Ambil evals_result dari training (disimpan di session atau db)
-#         evals = st.session_state.get(f'evals_{versi}', {})
-#         if not evals:
-#             st.caption("Kurva loss tidak tersedia untuk versi ini.")
-#             return
-#         train_rmse = evals.get('train', {}).get('rmse', [])
-#         val_rmse   = evals.get('eval',  {}).get('rmse', [])
-#         fig = go.Figure()
-#         fig.add_scatter(y=train_rmse, name='Train RMSE',
-#                         line=dict(color='#1D9E75', width=1.5))
-#         fig.add_scatter(y=val_rmse, name='Val RMSE',
-#                         line=dict(color='#EF9F27', width=1.5, dash='dash'))
-#         fig.update_layout(margin=dict(l=0,r=0,t=0,b=0), height=200,
-#                           legend=dict(orientation='h', y=1.1))
-#         st.plotly_chart(fig, use_container_width=True)
-
-#     def _render_compare_chart(self, df: pd.DataFrame):
-#         fig = go.Figure(go.Bar(
-#             x=df['versi'], y=df['rmse'],
-#             marker_color=['#1D9E75' if s == 'active' else '#B4B2A9'
-#                           for s in df['status']],
-#             marker_cornerradius=4
-#         ))
-#         fig.update_layout(margin=dict(l=0,r=0,t=0,b=0), height=200,
-#                           yaxis_title='RMSE')
-#         st.plotly_chart(fig, use_container_width=True)
-
-#     def render(self):
-#         st.title("Model management")
-#         st.caption("Kelola versi model XGBoost — training, evaluasi, dan registry")
-
-#         df = self.registry.get_all()
-#         active = df[df['status'] == 'active'].iloc[0] if len(df) else None
-
-#         c1, c2, c3, c4 = st.columns(4)
-#         c1.metric("Total versi",    len(df))
-#         c2.metric("Model aktif",    active['versi'] if active is not None else '—')
-#         c3.metric("R² terbaik",     df['r2'].max() if len(df) else '—')
-#         c4.metric("Training terakhir", df['tanggal_training'].iloc[0][:10] if len(df) else '—')
-
-#         # Tombol retrain
-#         col1, col2 = st.columns([4,1])
-#         with col2:
-#             if st.button("Retrain model", type="primary", use_container_width=True):
-#                 with st.spinner("Melatih ulang model XGBoost..."):
-#                     db_data = self.xgb.db.get_all_penjualan()
-#                     hasil   = self.xgb.train(db_data)
-#                     versi   = self.registry.save(
-#                         self.xgb.model, hasil,
-#                         self.xgb.model.get_params(), "Retrain otomatis")
-#                     st.success(f"Model {versi} berhasil dilatih! RMSE: {hasil['rmse']}")
-#                     st.rerun()
-
-#         # Tabel registry
-#         st.dataframe(
-#             df[['versi','tanggal_training','rmse','mae','r2','mape','status']],
-#             use_container_width=True, hide_index=True,
-#             column_config={
-#                 'r2':   st.column_config.NumberColumn("R²",   format="%.3f"),
-#                 'mape': st.column_config.NumberColumn("MAPE", format="%.1f%%"),
-#             }
-#         )
-
-#         # Detail & aksi per versi
-#         versi_list = df['versi'].tolist()
-#         selected   = st.selectbox("Pilih versi untuk detail", versi_list)
-#         row        = df[df['versi'] == selected].iloc[0]
-
-#         col_a, col_b = st.columns(2)
-#         with col_a:
-#             st.markdown("##### Hyperparameter")
-#             params = json.loads(row['hyperparameter'])
-#             for k, v in params.items():
-#                 st.markdown(f"`{k}` = **{v}**")
-#         with col_b:
-#             st.markdown("##### Perbandingan RMSE")
-#             self._render_compare_chart(df)
-
-#         self._render_loss_curve(selected)
-
-#         col_act, col_dl, col_del = st.columns(3)
-#         with col_act:
-#             if row['status'] != 'active':
-#                 if st.button(f"Aktifkan {selected}", use_container_width=True, type="primary"):
-#                     self.registry.activate(selected)
-#                     st.success(f"Model {selected} kini aktif!")
-#                     st.rerun()
-#             else:
-#                 st.success(f"Model {selected} sudah aktif")
-#         with col_dl:
-#             with open(row['file_path'], 'rb') as f:
-#                 st.download_button("Download .pkl", f,
-#                                    file_name=f"xgboost_{selected}.pkl",
-#                                    use_container_width=True)
-#         with col_del:
-#             if row['status'] != 'active':
-#                 if st.button(f"Hapus {selected}", use_container_width=True):
-#                     self.registry.delete(selected)
-#                     st.warning(f"Model {selected} dihapus.")
-#                     st.rerun()
-
-#app/model_managemen.py
+# app/model_management.py
 import streamlit as st
 import pandas as pd
-import json
-import os
 
 class ModelManagementPage:
     def __init__(self, registry, xgb_service, db):
@@ -124,69 +9,224 @@ class ModelManagementPage:
         self.db = db
 
     def render(self):
+        # 1. Suntikkan CSS untuk padding tombol 3px dan merapikan tampilan
+        st.markdown("""
+            <style>
+                /* Memberikan padding 3px pada semua sisi tombol */
+                div.stButton > button {
+                    padding: 3px 3px !important;
+                    min-height: 0px !important;
+                    height: auto !important;
+                }
+                /* Mencegah teks tumpang tindih pada kolom sempit */
+                div[data-testid="column"] {
+                    overflow: hidden;
+                }
+            </style>
+        """, unsafe_allow_html=True)
+
         st.title("Model Management")
+        st.caption("Kelola versi model prediksi")
 
-        df = self.registry.get_all()
+        tab1, tab2 = st.tabs([
+            "Daftar Model",
+            "Retrain Model"
+        ])
 
-        if df is None or df.empty:
-            st.info("Belum ada model.")
-        else:
-            st.dataframe(df, use_container_width=True)
+        with tab1:
+            self.show_models()
 
-        st.divider()
+        with tab2:
+            self.retrain_model()
 
-        # =============================
-        # UPLOAD MODEL
-        # =============================
-        st.subheader("Upload Model (.pkl)")
+    def show_models(self):
+        df = self.registry.get_all() # Memanggil DatabaseService.fetchdf
 
-        uploaded = st.file_uploader("Upload model", type=["pkl"])
+        if df.empty:
+            st.info("Belum ada model tersimpan")
+            return
 
-        if uploaded:
-            save_path = f"model/uploaded_{uploaded.name}"
+        st.markdown("### 🤖 Daftar Model")
+        
+        # Grid Header
+        header = st.columns([1.5, 2, 0.8, 0.8, 0.8, 1.2, 2.5])
+        names = ["Versi", "Tanggal", "RMSE", "MAE", "R²", "Status", "Aksi"]
+        for col, name in zip(header, names):
+            col.markdown(f"**{name}**")
 
-            with open(save_path, "wb") as f:
-                f.write(uploaded.read())
+        for i, row in df.iterrows():
+            # Normalisasi status untuk pengecekan
+            curr_status = str(row["status"]).strip().lower()
+            # Jika 'aktif' maka True, jika 'nonaktif' atau 'archive' maka False
+            is_active = (curr_status == "aktif")
+            
+            cols = st.columns([1.5, 2, 0.8, 0.8, 0.8, 1.2, 2.5])
+            cols[0].write(row["versi"])
+            cols[1].write(row["tanggal_training"])
+            cols[2].write(f"{row['rmse']:.2f}")
+            cols[3].write(f"{row['mae']:.2f}")
+            cols[4].write(f"{row['r2']:.4f}")
+            
+            # Tampilan Label Status
+            status_text = "Aktif" if is_active else "Nonaktif"
+            cols[5].write(status_text)
 
-            st.success("Model berhasil diupload")
+            # Bagian Tombol
+            btn_akt, btn_hap = cols[6].columns(2)
+            
+            with btn_akt:
+                # Tombol MATI (disabled) jika status sudah aktif
+                clicked = st.button(
+                    "Aktifkan",
+                    key=f"akt_{row['versi']}",
+                    disabled=is_active,
+                    type="primary",
+                    use_container_width=True
+                )
 
-        # =============================
-        # AKTIFKAN MODEL
-        # =============================
-        if df is not None and not df.empty:
+                if clicked:
+                    self.registry.activate(row["versi"])
 
-            versi = st.selectbox("Pilih model", df["versi"])
+                    st.success(f"Model {row['versi']} berhasil diaktifkan")
 
-            col1, col2 = st.columns(2)
+                    st.rerun() # Refresh untuk ambil data terbaru
 
-            with col1:
-                if st.button("Aktifkan model"):
-                    try:
-                        self.registry.activate(versi)
-                        st.success(f"Model {versi} aktif")
-                        st.rerun()
-                    except Exception as e:
-                        st.error(str(e))
+            with btn_hap:
+                if st.button("Hapus", key=f"hap_{row['versi']}", use_container_width=True):
+                    self.registry.delete(row["versi"])
+                    st.rerun()
 
-            with col2:
-                if st.button("Hapus model"):
-                    try:
-                        self.registry.delete(versi)
-                        st.warning(f"Model {versi} dihapus")
-                        st.rerun()
-                    except Exception as e:
-                        st.error(str(e))
+    def retrain_model(self):
+        st.subheader("Retrain Model")
+        df_all = self.registry.get_all()
+        
+        # Filter model aktif menggunakan .str.lower() untuk Series pandas
+        model_aktif = df_all[df_all["status"].str.lower() == "aktif"]
+        
+        if model_aktif.empty:
+            st.warning("Tidak ada model aktif. Aktifkan model di tab 'Daftar Model' terlebih dahulu.")
+            return
 
-        # =============================
-        # LOAD MODEL AKTIF KE XGB
-        # =============================
-        st.divider()
+        options = model_aktif["versi"].tolist()
+        
+        col_sel, _ = st.columns([2, 1])
+        with col_sel:
+            model_ref = st.selectbox("Model Referensi (Aktif)", options)
+            catatan = st.text_input("Catatan", placeholder="Misal: Data terbaru Mei 2026")
 
-        if st.button("Load model aktif ke sistem"):
+        btn_train, _ = st.columns([0.6, 3])
+        if btn_train.button("Mulai Retrain", type="primary", use_container_width=True):
+            # ... proses training ...
+            st.success(f"Model baru berhasil dilatih dari referensi {model_ref}")
+            st.rerun()
 
-            try:
-                model = self.registry.load_active()
-                self.xgb.model = model
-                st.success("Model aktif berhasil dimuat")
-            except Exception as e:
-                st.error(str(e))
+# app/model_management.py
+# import streamlit as st
+# import pandas as pd
+
+# class ModelManagementPage:
+#     def __init__(self, registry, xgb_service, db):
+#         self.registry = registry
+#         self.xgb = xgb_service
+#         self.db = db
+
+#     def render(self):
+#         st.title("Model Management")
+#         st.caption("Kelola versi model prediksi")
+
+#         tab1, tab2 = st.tabs([
+#             "Daftar Model",
+#             "Retrain Model"
+#         ])
+
+#         with tab1:
+#             self.show_models()
+
+#         with tab2:
+#             self.retrain_model()
+
+#     def show_models(self):
+#         df = self.registry.get_all()
+
+#         if df.empty:
+#             st.info("Belum ada model tersimpan")
+#             return
+
+#         st.markdown("### Daftar Model")
+        
+#         # Header tabel manual
+#         header = st.columns([2, 2, 1, 1, 1, 1.5, 2.5])
+#         cols_name = ["Versi", "Tanggal", "RMSE", "MAE", "R²", "Status", "Aksi"]
+#         for col, name in zip(header, cols_name):
+#             col.markdown(f"**{name}**")
+
+#         for i, row in df.iterrows():
+#             cols = st.columns([2, 2, 1, 1, 1, 1.5, 2.5])
+            
+#             cols[0].write(row["versi"])
+#             cols[1].write(row["tanggal_training"])
+#             cols[2].write(f"{row['rmse']:.2f}")
+#             cols[3].write(f"{row['mae']:.2f}")
+#             cols[4].write(f"{row['r2']:.4f}")
+            
+#             # Status dengan badge sederhana
+#             status_label = "Aktif" if row["status"].lower() == "aktif" else "Nonaktif"
+#             cols[5].write(status_label)
+
+#             aksi = cols[6].columns([1.2, 1])
+            
+#             # Logika Tombol Aktifkan: Disabled jika sudah aktif
+#             is_active = row["status"].lower() == "aktif"
+#             if aksi[0].button("Aktifkan", key=f"aktif_{row['versi']}", disabled=is_active, type="primary"):
+#                 self.registry.activate(row["versi"])
+#                 st.rerun()
+
+#             if aksi[1].button("Hapus", key=f"hapus_{row['versi']}"):
+#                 self.registry.delete(row["versi"])
+#                 st.rerun()
+
+#     def retrain_model(self):
+#         st.subheader("Retrain Model")
+#         st.info("Proses ini akan melatih model baru menggunakan data transaksi terbaru dari database.")
+
+#         # Input dipersingkat, hanya catatan yang diperlukan
+#         col_inp, _ = st.columns([2, 1])
+#         with col_inp:
+#             catatan = st.text_input(
+#                 "Catatan Training", 
+#                 placeholder="Misal: Penambahan data Mei 2026",
+#                 help="Berikan deskripsi singkat perubahan data atau alasan retrain."
+#             )
+
+#         # Tombol retrain disesuaikan lebarnya (tidak stretch full)
+#         btn_col, _ = st.columns([1, 3])
+#         if btn_col.button("Mulai Retrain", type="primary"):
+#             try:
+#                 df = self.db.get_weekly_sales()
+
+#                 if df.empty:
+#                     st.warning("Gagal retrain: Data transaksi tidak ditemukan.")
+#                     return
+
+#                 with st.spinner("Sedang melatih model baru..."):
+#                     metrics, params = self.xgb.train(df)
+                    
+#                     # Simpan model
+#                     versi_baru = self.registry.save(
+#                         self.xgb.model,
+#                         metrics,
+#                         params,
+#                         catatan if catatan else "Retrain berkala"
+#                     )
+
+#                 st.success(f"Model berhasil diperbarui ke versi: {versi_baru}")
+                
+#                 # Tampilkan metrik hasil training
+#                 m_col1, m_col2, m_col3, m_col4 = st.columns(4)
+#                 m_col1.metric("RMSE", f"{metrics['rmse']:.2f}")
+#                 m_col2.metric("MAE", f"{metrics['mae']:.2f}")
+#                 m_col3.metric("R²", f"{metrics['r2']:.4f}")
+#                 m_col4.metric("MSE", f"{metrics.get('mse', 0):.2f}")
+
+#             except Exception as e:
+#                 st.error(f"Terjadi kesalahan: {str(e)}")

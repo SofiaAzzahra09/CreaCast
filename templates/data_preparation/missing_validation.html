@@ -1,0 +1,104 @@
+<!-- templates/data_preparation/missing_value.html -->
+{% extends "base.html" %}
+
+{% block content %}
+
+<div class="page-header">
+    <h1>Validasi Missing Data</h1>
+    <p>Lengkapi entri data kosong sebelum dieksekusi oleh mesin sistem</p>
+</div>
+
+<div class="card">
+    <!-- Tambahkan action eksplisit mengarah ke fungsi validasi data preparation -->
+    <form method="POST" action="{{ url_for('data_preparation.missing_validation') }}" id="missing-form">
+        <input
+            type="hidden"
+            name="total_rows"
+            value="{{ missing_data|length }}"
+        >
+
+        <div class="table-wrapper">
+            <table class="custom-table">
+                <thead>
+                    <tr>
+                        <th class="col-no" style="width: 50px;">No</th>
+                        {% for key in missing_data[0].keys() %}
+                            <th>{{ key }}</th>
+                        {% endfor %}
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for row in missing_data %}
+                    {% set row_index = loop.index0 %}
+                    <tr>
+                        <td>{{ loop.index }}</td>
+                        {% for key, value in row.items() %}
+                        <td>
+                            <!-- Jika kolom 'created_at' ikut terbawa, buat jadi read-only agar tidak merusak database -->
+                            {% if key == 'created_at' or key == 'id' %}
+                                <input type="text" class="form-control-plaintext" name="{{ key }}_{{ row_index }}" value="{{ value if value != None else '' }}" readonly style="font-size: 13px; color: #6b7280;">
+                            {% else %}
+                                <input
+                                    type="text"
+                                    class="form-control"
+                                    name="{{ key }}_{{ row_index }}"
+                                    value="{{ value if value != None else '' }}"
+                                    style="min-width: 140px; padding: 6px 10px; font-size: 13px;"
+                                    placeholder="Lengkapi data..."
+                                >
+                            {% endif %}
+                        </td>
+                        {% endfor %}
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+
+        <div style="display: flex; justify-content: flex-end; gap: 10px; margin-top: 20px;">
+            <button
+                type="submit"
+                name="action"
+                value="auto"
+                class="btn btn-secondary"
+                id="btn-auto-fill"
+            >
+                Isi Otomatis (Mode Produk/Harga)
+            </button>
+            <button
+                type="submit"
+                name="action"
+                value="manual"
+                class="btn btn-primary text-white"
+                id="btn-manual-save"
+            >
+                Gunakan Data Manual
+            </button>
+        </div>
+    </form>
+</div>
+
+<div id="loading-overlay-missing" class="modal-backdrop fade" style="display: none; background: rgba(0,0,0,0.5); justify-content: center; align-items: center; z-index: 9999; position: fixed; top:0; left:0; width:100vw; height:100vh;">
+    <div class="card text-center p-4" style="width: 280px; border-radius: 18px; box-shadow: 0 10px 30px rgba(0,0,0,0.15); margin-bottom: 0;">
+        <div class="spinner-border text-primary mx-auto" style="width: 3rem; height: 3rem;" role="status"></div>
+        <p class="mt-3" style="font-weight: 600; color: #111827; margin-bottom: 0;">
+            Memproses Imputasi & Pipeline...
+        </p>
+    </div>
+</div>
+
+<script>
+const missingForm = document.getElementById("missing-form");
+if(missingForm) {
+    missingForm.addEventListener("submit", function() {
+        const overlay = document.getElementById("loading-overlay-missing");
+        overlay.style.display = "flex";
+        overlay.classList.add("show");
+
+        document.getElementById("btn-auto-fill").disabled = true;
+        document.getElementById("btn-manual-save").disabled = true;
+    });
+}
+</script>
+
+{% endblock %}
