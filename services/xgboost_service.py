@@ -98,6 +98,9 @@
 import pandas as pd
 import numpy as np
 import joblib
+import plotly.graph_objects as go
+import plotly
+import json
 
 from xgboost import XGBRegressor
 from sklearn.model_selection import RandomizedSearchCV, TimeSeriesSplit
@@ -360,9 +363,44 @@ class XGBoostService:
 
         metrics = self.evaluate(X_test, y_test)
 
+        y_test_values = metrics["y_test"]
+        y_pred_values = metrics["y_pred"]
+
         self.save_model()
 
-        return metrics, best_params
+        fig = go.Figure()
+
+        fig.add_trace(
+            go.Scatter(
+                y=y_test_values.tolist(),
+                mode='lines+markers',
+                name='Aktual'
+            )
+        )
+
+        fig.add_trace(
+            go.Scatter(
+                y=y_pred_values.tolist(),
+                mode='lines+markers',
+                name='Prediksi'
+            )
+        )
+
+        fig.update_layout(
+            title="Evaluasi Model Aktual vs Prediksi",
+            xaxis_title="Data Test",
+            yaxis_title="Jumlah Penjualan",
+            height=400
+        )
+
+        chart_json = json.dumps(
+            fig,
+            cls=plotly.utils.PlotlyJSONEncoder
+        )
+
+        return metrics, best_params, chart_json
+
+        # return metrics, best_params
 
     # =============================
     # EVALUASI

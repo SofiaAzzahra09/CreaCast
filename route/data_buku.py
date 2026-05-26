@@ -209,55 +209,169 @@ def import_excel():
 
     db = DatabaseService()
 
-    # 1. Ambil list semua file yang di-upload dari HTML (sesuai name="files")
     uploaded_files = request.files.getlist("files")
 
-    # Validasi jika user klik import tapi tidak memilih file sama sekali
     if not uploaded_files or uploaded_files[0].filename == '':
         flash("Tidak ada file yang dipilih", "danger")
         return redirect(url_for("data_buku.index"))
 
     jumlah_file_sukses = 0
 
-    # 2. Iterasi/looping setiap file yang diunggah
+    # =========================================
+    # LOOP SEMUA FILE
+    # =========================================
     for file in uploaded_files:
+
         filename = file.filename.lower()
 
         try:
-            # 3. Cek ekstensi file dan baca menggunakan Pandas yang sesuai
-            if filename.endswith('.csv'):
+
+            # =========================================
+            # BACA FILE
+            # =========================================
+            if filename.endswith(".csv"):
                 df = pd.read_csv(file)
-            elif filename.endswith(('.xls', '.xlsx')):
+
+            elif filename.endswith((".xls", ".xlsx")):
                 df = pd.read_excel(file)
+
             else:
-                # Jika ada file dengan ekstensi aneh, skip ke file berikutnya
                 continue
 
-            # 4. Bersihkan nama kolom seperti kode aslimu
+            # =========================================
+            # NORMALISASI NAMA KOLOM
+            # =========================================
             df.columns = (
                 df.columns
                 .str.strip()
                 .str.lower()
             )
 
-            # 5. Looping isi baris data dan simpan ke database
+            # =========================================
+            # LOOP DATA
+            # =========================================
             for _, row in df.iterrows():
-                db.save_buku({
-                    "judul": row.get("nama variasi", "Tanpa Variasi"),
-                    "kategori": row.get("nama produk", "-"),
-                    "harga": row.get("harga", 0), # Disambungkan ke kolom 'harga' jika ada di excel
-                    "stok": row.get("stok", 0)    # Disambungkan ke kolom 'stok' jika ada di excel
-                })
-            
+
+                judul = str(
+                    row.get("nama variasi", "Tanpa Variasi")
+                ).strip()
+
+                kategori = str(
+                    row.get("nama produk", "-")
+                ).strip()
+
+                harga = pd.to_numeric(
+                    row.get("harga awal", 0),
+                    errors="coerce"
+                )
+
+                stok = pd.to_numeric(
+                    row.get("stok", 0),
+                    errors="coerce"
+                )
+
+                harga = 0 if pd.isna(harga) else int(harga)
+                stok = 0 if pd.isna(stok) else int(stok)
+
+                # =========================================
+                # CEK DATA EXISTING
+                # =========================================
+                existing = db.get_all_buku()
+
+                duplicate = existing[
+                    (
+                        existing["judul"]
+                        .astype(str)
+                        .str.strip()
+                        .str.lower()
+                        == judul.lower()
+                    )
+                    &
+                    (
+                        existing["kategori"]
+                        .astype(str)
+                        .str.strip()
+                        .str.lower()
+                        == kategori.lower()
+                    )
+                ]
+
+                # =========================================
+                # INSERT BARU
+                # =========================================
+                if duplicate.empty:
+
+                    db.save_buku({
+                        "judul": judul,
+                        "kategori": kategori,
+                        "harga": harga,
+                        "stok": stok
+                    })
+
+                # =========================================
+                # UPDATE JIKA DATA LAMA KOSONG
+                # =========================================
+                else:
+
+                    data_lama = duplicate.iloc[0]
+
+                    harga_lama = int(
+                        data_lama.get("harga", 0)
+                    )
+
+                    stok_lama = int(
+                        data_lama.get("stok", 0)
+                    )
+
+                    update_harga = (
+                        harga_lama == 0
+                        and harga > 0
+                    )
+
+                    update_stok = (
+                        stok_lama == 0
+                        and stok > 0
+                    )
+
+                    # kalau data baru lebih lengkap
+                    if update_harga or update_stok:
+
+                        db.save_buku({
+                            "id": int(data_lama["id"]),
+                            "judul": judul,
+                            "kategori": kategori,
+
+                            "harga": (
+                                harga
+                                if update_harga
+                                else harga_lama
+                            ),
+
+                            "stok": (
+                                stok
+                                if update_stok
+                                else stok_lama
+                            )
+                        })
+
             jumlah_file_sukses += 1
 
         except Exception as e:
-            # Jika ada satu file yang rusak/error, aplikasi tidak akan crash, melainkan lanjut log file lain
-            flash(f"Gagal memproses file {file.filename}: {str(e)}", "danger")
+
+            flash(
+                f"Gagal memproses file {file.filename}: {str(e)}",
+                "danger"
+            )
+
             continue
 
-    # 6. Beri feedback sukses ke user
+    # =========================================
+    # FEEDBACK
+    # =========================================
     if jumlah_file_sukses > 0:
-        flash(f"Berhasil mengimport {jumlah_file_sukses} file.", "success")
-    
+        flash(
+            f"Berhasil mengimport {jumlah_file_sukses} file.",
+            "success"
+        )
+
     return redirect(url_for("data_buku.index"))

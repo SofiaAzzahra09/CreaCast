@@ -36,7 +36,7 @@
                     class="form-select"
                 >
                     <option value="1"
-                        {% if request.form.get('n_weeks') == '1' %}
+                        {% if selected_weeks|string == '1' %}
                             selected
                         {% endif %}
                     >
@@ -44,7 +44,7 @@
                     </option>
 
                     <option value="2"
-                        {% if request.form.get('n_weeks') == '2' %}
+                        {% if selected_weeks|string == '2' %}
                             selected
                         {% endif %}
                     >
@@ -52,8 +52,7 @@
                     </option>
 
                     <option value="4"
-                        {% if not request.form.get('n_weeks')
-                        or request.form.get('n_weeks') == '4' %}
+                        {% if selected_weeks|string == '4' %}
                             selected
                         {% endif %}
                     >
@@ -61,7 +60,7 @@
                     </option>
 
                     <option value="8"
-                        {% if request.form.get('n_weeks') == '8' %}
+                        {% if selected_weeks|string == '8' %}
                             selected
                         {% endif %}
                     >
@@ -112,7 +111,7 @@
 
                 <button
                     type="submit"
-                    class="btn btn-primary w-100"
+                    class="btn btn-primary w-100 color"
                     id="submit-btn"
                 >
 
@@ -206,45 +205,7 @@
         Hasil Forecast
     </h5>
 
-    <div class="table-responsive">
-
-        <table class="table table-bordered">
-
-            <thead>
-                <tr>
-                    <th>Nama Variasi</th>
-                    <th>Forecast</th>
-                </tr>
-            </thead>
-
-            <tbody>
-
-                {% if forecast_data %}
-
-                    {% for item in forecast_data %}
-
-                    <tr>
-                        <td>{{ item.nama_variasi }}</td>
-                        <td>{{ item.forecast }}</td>
-                    </tr>
-
-                    {% endfor %}
-
-                {% else %}
-
-                    <tr>
-                        <td colspan="2" class="text-center">
-                            Belum ada hasil forecast
-                        </td>
-                    </tr>
-
-                {% endif %}
-
-            </tbody>
-
-        </table>
-
-    </div>
+    {% include "components/table.html" with context %}
 
 </div>
 
@@ -255,62 +216,86 @@
 
 document.addEventListener("DOMContentLoaded", function () {
 
-    const chartDiv = document.getElementById("forecast-chart");
+    const chartDiv =
+        document.getElementById("forecast-chart");
 
     {% if chart_json %}
 
         // =========================
-        // ADA DATA CHART
+        // LOAD CHART
         // =========================
 
-        const chart = JSON.parse('{{ chart_json | safe }}');
+        const chart =
+            JSON.parse(
+                '{{ chart_json | safe }}'
+            );
 
         Plotly.newPlot(
+
             chartDiv,
+
             chart.data,
+
             chart.layout,
+
             {
                 responsive: true
             }
+
         );
 
     {% else %}
 
         // =========================
-        // PLACEHOLDER CHART
+        // PLACEHOLDER
         // =========================
 
         Plotly.newPlot(
+
             chartDiv,
+
             [],
+
             {
                 title: "Belum Ada Evaluasi Model",
+
                 xaxis: {
                     visible: false
                 },
+
                 yaxis: {
                     visible: false
                 },
+
                 annotations: [
+
                     {
-                        text: "Silakan jalankan forecasting terlebih dahulu",
+                        text:
+                            "Silakan jalankan forecasting terlebih dahulu",
+
                         xref: "paper",
+
                         yref: "paper",
+
                         showarrow: false,
+
                         font: {
                             size: 16
                         }
                     }
+
                 ]
             },
+
             {
                 responsive: true
             }
+
         );
 
     {% endif %}
 
-    // auto resize
+    // resize otomatis
     window.addEventListener("resize", function () {
 
         Plotly.Plots.resize(chartDiv);

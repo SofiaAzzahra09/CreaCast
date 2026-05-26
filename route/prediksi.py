@@ -1,16 +1,14 @@
 # route/prediksi.py
-# route/prediksi.py
+
 from flask import (
     Blueprint,
     render_template,
     request,
     redirect,
     url_for,
-    flash,
-    session
+    flash
 )
 
-import pandas as pd
 import plotly.graph_objects as go
 import plotly
 
@@ -18,6 +16,7 @@ from services.database_service import DatabaseService
 from services.xgboost_service import XGBoostService
 from services.model_registry import ModelRegistry
 from services.pipeline_service import PipelineService
+import pandas as pd
 
 import json
 
@@ -36,30 +35,77 @@ pipeline = PipelineService()
 
 @prediksi_bp.route("/", methods=["GET", "POST"])
 def index():
+
     metrics = {}
     forecast_data = []
-    # chart_json = None
-    chart_json = session.get("last_chart")
-    metrics = session.get("last_metrics", {})
-    forecast_data = session.get("last_forecast", [])
-    versi_model = session.get("last_model")
-    # versi_model = None
+    chart_json = None
+    versi_model = None
+    forecast_label = None
+
+    # =====================================================
+    # POST -> TRAIN & FORECAST BARU
+    # =====================================================
 
     if request.method == "POST":
-        try:
-            n_weeks = int(request.form.get("n_weeks", 4))
-            hist = int(request.form.get("hist", 26))
 
-            df = db.get_weekly_sales(weeks=hist)
+        try:
+
+            n_weeks = int(
+                request.form.get("n_weeks", 4)
+            )
+
+            hist = int(
+                request.form.get("hist", 26)
+            )
+
+            # =============================================
+            # LABEL TABEL
+            # =============================================
+
+            if n_weeks == 1:
+
+                forecast_label = (
+                    "Prediksi Stok 1 Minggu ke Depan"
+                )
+
+            else:
+
+                forecast_label = (
+                    f"Prediksi Stok {n_weeks} Minggu ke Depan"
+                )
+
+            # session["forecast_weeks"] = n_weeks
+
+            # =============================================
+            # LOAD DATA HISTORIS
+            # =============================================
+
+            df = db.get_weekly_sales(
+                weeks=hist
+            )
 
             if df.empty:
-                flash("Data mingguan belum tersedia.", "warning")
-                return redirect(url_for("prediksi.index"))
 
-            # 1. Melatih Model Baru lewat tombol di halaman prediksi
-            metrics_res, params = xgb.train(df)
+                flash(
+                    "Data mingguan belum tersedia.",
+                    "warning"
+                )
 
-            # 2. Simpan ke Registry (otomatis jadi v1, v2, dst)
+                return redirect(
+                    url_for("prediksi.index")
+                )
+
+            # =============================================
+            # TRAIN MODEL
+            # =============================================
+
+            # metrics_res, params = xgb.train(df)
+            metrics_res, params, eval_chart = xgb.train(df)
+
+            # =============================================
+            # SIMPAN MODEL BARU
+            # =============================================
+
             versi = registry.save(
                 xgb.model,
                 metrics_res,
@@ -67,259 +113,457 @@ def index():
                 f"Auto forecast {n_weeks} minggu"
             )
 
-            # 3. Aktifkan model baru tersebut
+            db.execute("""
+                UPDATE model_registry
+                SET chart_json = ?,
+                    forecast_weeks = ?
+                WHERE versi = ?
+            """, (
+                eval_chart,
+                n_weeks,
+                versi
+            ))
+
+            # =============================================
+            # AKTIFKAN MODEL TERBARU
+            # =============================================
+
             registry.activate(versi)
 
-            # 4. PANGGIL PIPELINE FORECAST UTAMANYA
-            sukses, hasil_forecast = generate_forecast_pipeline(versi_model=versi, n_weeks=n_weeks, hist=hist)
-            
+            # =============================================
+            # GENERATE FORECAST
+            # =============================================
+
+            sukses, hasil_forecast = (
+                generate_forecast_pipeline(
+                    versi_model=versi,
+                    n_weeks=n_weeks,
+                    hist=hist
+                )
+            )
+
             if not sukses:
-                flash(hasil_forecast, "danger") # hasil_forecast berisi pesan error jika gagal
-                return redirect(url_for("prediksi.index"))
 
-            # 5. Siapkan Chart Visualisasi
-            fig = go.Figure()
-            fig.add_trace(go.Scatter(y=metrics_res["y_test"], name="Aktual"))
-            fig.add_trace(go.Scatter(y=metrics_res["y_pred"], name="Prediksi"))
-            fig.update_layout(height=350, margin=dict(l=0, r=0, t=20, b=0))
+                flash(
+                    hasil_forecast,
+                    "danger"
+                )
 
-            chart_json = json.dumps(fig, cls=plotly.utils.PlotlyJSONEncoder)
-            # SIMPAN KE SESSION
-            session["last_chart"] = chart_json
+                return redirect(
+                    url_for("prediksi.index")
+                )
 
-            session["last_metrics"] = {
-                "mse": round(metrics_res["mse"], 2),
-                "rmse": round(metrics_res["rmse"], 2),
-                "mae": round(metrics_res["mae"], 2),
-                "r2": round(metrics_res["r2"], 3),
-            }
+            flash(
+                f"Model baru berhasil dilatih ({versi}) dan prediksi telah diperbarui!",
+                "success"
+            )
 
-            session["last_forecast"] = hasil_forecast
-            session["last_model"] = versi
-
-            # metrics = {
-            #     "mse": round(metrics_res["mse"], 2),
-            #     "rmse": round(metrics_res["rmse"], 2),
-            #     "mae": round(metrics_res["mae"], 2),
-            #     "r2": round(metrics_res["r2"], 3),
-            # }
-
-            # forecast_data = hasil_forecast
-            # versi_model = versi
-
-            flash(f"Model baru berhasil dilatih ({versi}) dan prediksi telah diperbarui!", "success")
+            return redirect(
+                url_for("prediksi.index")
+            )
 
         except Exception as e:
-            flash(f"Error model: {str(e)}", "danger")
+
+            flash(
+                f"Error model: {str(e)}",
+                "danger"
+            )
+
+            return redirect(
+                url_for("prediksi.index")
+            )
+
+    # =====================================================
+    # LOAD MODEL AKTIF
+    # =====================================================
+
+    model_aktif = db.fetchone("""
+        SELECT *
+        FROM model_registry
+        WHERE LOWER(status) = 'aktif'
+        ORDER BY tanggal_training DESC
+        LIMIT 1
+    """)
+
+    # =====================================================
+    # JIKA ADA MODEL AKTIF
+    # =====================================================
+
+    if model_aktif:
+
+        versi_model = model_aktif["versi"]
+
+        metrics = {
+
+            "mse": round(
+                model_aktif["mse"],
+                2
+            ),
+
+            "rmse": round(
+                model_aktif["rmse"],
+                2
+            ),
+
+            "mae": round(
+                model_aktif["mae"],
+                2
+            ),
+
+            "r2": round(
+                model_aktif["r2"],
+                3
+            ),
+        }
+
+        # =============================================
+        # LOAD FORECAST TERBARU
+        # =============================================
+
+        rows = db.fetchdf("""
+            SELECT 
+                b.judul AS nama_variasi,
+                SUM(p.prediksi) AS forecast
+            FROM prediksi p
+            JOIN buku b
+                ON p.id_buku = b.id
+            WHERE p.model_versi = ?
+            GROUP BY b.judul
+            ORDER BY b.judul ASC
+        """, (versi_model,))
+
+        if not rows.empty:
+
+            forecast_data = rows.to_dict(
+                orient="records"
+            )
+
+            # =========================================
+            # CHART FORECAST
+            # =========================================
+
+            chart_json = model_aktif["chart_json"]
+
+    # =====================================================
+    # SELECTED WEEKS
+    # =====================================================
+
+    selected_weeks = 4
+
+    if model_aktif:
+
+        selected_weeks = (
+            model_aktif["forecast_weeks"] or 4
+        )
+
+    # =====================================================
+    # LABEL DEFAULT
+    # =====================================================
+
+    saved_weeks = selected_weeks
+
+    if not forecast_label:
+
+        if saved_weeks == 1:
+
+            forecast_label = (
+                "Prediksi Stok 1 Minggu ke Depan"
+            )
+
+        else:
+
+            forecast_label = (
+                f"Prediksi Stok {saved_weeks} Minggu ke Depan"
+            )
+
+    # =====================================================
+    # RENDER
+    # =====================================================
+
+        # =====================================================
+    # TABLE CONFIG
+    # =====================================================
+
+    table_config = {
+
+        "headers": [
+
+            {
+                "title": "Nama Variasi",
+                "style": "min-width:250px;"
+            },
+
+            {
+                "title": forecast_label,
+                "style": "width:250px;"
+            }
+
+        ],
+
+        "columns": [
+
+            {
+                "key": "nama_variasi"
+            },
+
+            {
+                "key": "forecast_display"
+            }
+
+        ],
+
+        "show_action": False
+    }
+
+    # =====================================================
+    # FORMAT DATA TABLE
+    # =====================================================
+
+    for item in forecast_data:
+
+        item["forecast_display"] = (
+            f"{int(round(item['forecast']))} eksemplar"
+        )
 
     return render_template(
+
         "prediksi/index.html",
+
         metrics=metrics,
-        forecast_data=forecast_data,
+
+        data=forecast_data,
+
         chart_json=chart_json,
-        versi_model=versi_model
+
+        versi_model=versi_model,
+
+        forecast_label=forecast_label,
+
+        table_config=table_config,
+
+        selected_weeks=selected_weeks,
     )
 
-def generate_forecast_pipeline(versi_model, n_weeks=4, hist=26):
-    """
-    Fungsi global untuk menjalankan forecast ke seluruh variasi produk
-    menggunakan versi model tertentu dan langsung menyimpannya ke DB.
-    """
+
+# =========================================================
+# FORECAST PIPELINE
+# =========================================================
+
+def generate_forecast_pipeline(
+    versi_model,
+    n_weeks=4,
+    hist=26
+):
+
     import json
     import os
+
     from services.database_service import DatabaseService
     from services.xgboost_service import XGBoostService
-    
+
     db_service = DatabaseService()
-    df = db_service.get_weekly_sales(weeks=hist)
-    
-    if df.empty:
-        return False, "Data mingguan (weekly sales) kosong."
-        
-    # 1. Load Inverse Variasi Map untuk translate angka encoded -> teks nama buku
-    map_path = "data/variasi_map.json"
-    if not os.path.exists(map_path):
-        return False, f"File mapping {map_path} tidak ditemukan."
-        
-    with open(map_path, "r", encoding="utf-8") as f:
-        variasi_map = json.load(f)
-    
-    # Balik map: {0: "guru", 1: "koki", ...}
-    inverse_variasi_map = {v: k for k, v in variasi_map.items()}
-        
-    row_model = db_service.fetchone(
-        "SELECT file_path FROM model_registry WHERE versi = ?", (versi_model,)
+
+    df = db_service.get_weekly_sales(
+        weeks=hist
     )
+
+    if df.empty:
+
+        return (
+            False,
+            "Data mingguan kosong."
+        )
+
+    # =====================================================
+    # LOAD VARIASI MAP
+    # =====================================================
+
+    map_path = "data/variasi_map.json"
+
+    if not os.path.exists(map_path):
+
+        return (
+            False,
+            f"File mapping {map_path} tidak ditemukan."
+        )
+
+    with open(
+        map_path,
+        "r",
+        encoding="utf-8"
+    ) as f:
+
+        variasi_map = json.load(f)
+
+    inverse_variasi_map = {
+        v: k for k, v in variasi_map.items()
+    }
+
+    # =====================================================
+    # LOAD MODEL
+    # =====================================================
+
+    row_model = db_service.fetchone("""
+        SELECT file_path
+        FROM model_registry
+        WHERE versi = ?
+    """, (versi_model,))
+
     if not row_model:
-        return False, f"File untuk model versi {versi_model} tidak ditemukan."
-        
-    xgb_service = XGBoostService(row_model['file_path'])
-    
-    if hasattr(xgb_service, 'load_model'):
-        xgb_service.load_model() 
+
+        return (
+            False,
+            f"Model {versi_model} tidak ditemukan."
+        )
+
+    xgb_service = XGBoostService(
+        row_model["file_path"]
+    )
+
+    if hasattr(xgb_service, "load_model"):
+
+        xgb_service.load_model()
+
     else:
+
         import pickle
-        with open(row_model['file_path'], 'rb') as f:
+
+        with open(
+            row_model["file_path"],
+            "rb"
+        ) as f:
+
             xgb_service.model = pickle.load(f)
 
     if xgb_service.model is None:
-        return False, f"Gagal memuat file binary model untuk versi {versi_model}."
-        
+
+        return (
+            False,
+            f"Gagal load model {versi_model}."
+        )
+
+    # =====================================================
+    # HAPUS PREDIKSI LAMA MODEL INI
+    # =====================================================
+
+    db_service.execute("""
+        DELETE FROM prediksi
+        WHERE model_versi = ?
+    """, (versi_model,))
+
     all_forecasts = []
-    
-    # Looping forecast per variasi produk
+
+    # =====================================================
+    # LOOPING FORECAST
+    # =====================================================
+
     for variasi in df["variasi_encoded"].unique():
-        # FILTER KEAMANAN: Skip encoding 229 (NaN) karena bukan produk nyata
+
+        # skip invalid
         if int(variasi) == 229:
             continue
 
-        df_var = df[df["variasi_encoded"] == variasi].copy()
+        df_var = df[
+            df["variasi_encoded"] == variasi
+        ].copy()
 
         if len(df_var) < 4:
             continue
 
-        # Jalankan forecast multi-step (fitur waktu sudah dinamis di perbaikan sebelumnya)
-        forecast = xgb_service.forecast(df_var, n_weeks)
-        nama_variasi = df_var.iloc[0]["nama_variasi"]
-        last_week = df_var.iloc[-1]["minggu_ke"]
-        last_year = df_var.iloc[-1]["tahun"]
+        forecast = xgb_service.forecast(
+            df_var,
+            n_weeks
+        )
 
-        nama_variasi_clean = str(nama_variasi).strip().title()
+        nama_variasi = df_var.iloc[0][
+            "nama_variasi"
+        ]
+
+        last_week = int(
+            df_var.iloc[-1]["minggu_ke"]
+        )
+
+        last_year = int(
+            df_var.iloc[-1]["tahun"]
+        )
+
+        # =============================================
+        # TAMPILKAN TOTAL FORECAST
+        # =============================================
+
+        total_forecast = round(
+            float(sum(forecast))
+        )
+
         all_forecasts.append({
+
             "nama_variasi": nama_variasi,
-            "forecast": float(forecast[0])
+
+            "forecast": total_forecast
+
         })
 
-        # ====================================================================
-        # SINKRONISASI ID: Terjemahkan variasi_encoded ke id asli tabel buku
-        # ====================================================================
-        nama_buku_asli = inverse_variasi_map.get(int(variasi), None)
+        # =============================================
+        # MAP KE ID ASLI BUKU
+        # =============================================
+
+        nama_buku_asli = inverse_variasi_map.get(
+            int(variasi),
+            None
+        )
+
         id_buku_asli = None
-        
+
         if nama_buku_asli:
-            id_buku_asli = db_service.get_buku_id_by_judul(nama_buku_asli)
-        
-        # Fallback Khusus: Jika buku belum diinput ke master buku, 
-        # jangan simpan prediksinya dulu daripada merusak integritas Foreign Key DB
+
+            id_buku_asli = (
+                db_service.get_buku_id_by_judul(
+                    nama_buku_asli
+                )
+            )
+
+        print("================================")
+        print("VARIASI ENCODED :", variasi)
+        print("NAMA ASLI       :", nama_buku_asli)
+        print("ID BUKU         :", id_buku_asli)
+        print("================================")
+
         if id_buku_asli is None:
-            print(f"Peringatan: Buku '{nama_buku_asli}' (Encoded: {variasi}) belum ada di tabel master 'buku'. Prediksi dilewati.")
+
+            print(
+                f"Buku '{nama_buku_asli}' belum ada di tabel buku."
+            )
+
             continue
 
-        # Simpan hasil prediksi menggunakan ID asli yang valid dengan Foreign Key
-        db_service.save_prediction(
-            forecast,
-            start_week=last_week + 1,
-            start_year=last_year,
-            model_versi=versi_model,
-            id_buku=id_buku_asli  # <-- SEKARANG SUDAH AMAN
-        )
-    all_forecasts = sorted(all_forecasts, key=lambda x: x["nama_variasi"])
-        
-    return True, all_forecasts
+        # =============================================
+        # SIMPAN KE DATABASE
+        # =============================================
 
-def generateforecastpipeline(versi_model, n_weeks=4, hist=26):
-    """
-    Fungsi global untuk menjalankan forecast ke seluruh variasi produk
-    menggunakan versi model tertentu dan langsung menyimpannya ke DB.
-    """
-    from services.database_service import DatabaseService
-    from services.xgboost_service import XGBoostService
-    import pickle # <-- Tambahkan ini jika dibutuhkan
-    
-    db_service = DatabaseService()
-    df = db_service.get_weekly_sales(weeks=hist)
-    
-    if df.empty:
-        return False, "Data mingguan (weekly sales) kosong."
-        
-    # Memuat model spesifik berdasarkan file path di registry
-    row_model = db_service.fetchone(
-        "SELECT file_path FROM model_registry WHERE versi = ?", (versi_model,)
+        db_service.save_prediction(
+
+            forecast=forecast,
+
+            start_week=last_week + 1,
+
+            start_year=last_year,
+
+            model_versi=versi_model,
+
+            id_buku=id_buku_asli
+
+        )
+
+    # =====================================================
+    # SORT
+    # =====================================================
+
+    all_forecasts = sorted(
+
+        all_forecasts,
+
+        key=lambda x: x["nama_variasi"]
+
     )
-    if not row_model:
-        return False, f"File untuk model versi {versi_model} tidak ditemukan."
-        
-    # Inisialisasi XGBoostService (Sistem kamu sudah tahu path-nya dari sini)
-    xgb_service = XGBoostService(row_model['file_path'])
-    
-    # ====================================================================
-    # PERBAIKAN: Sesuaikan pemanggilan load_model tanpa melempar parameter path
-    # ====================================================================
-    if hasattr(xgb_service, 'load_model'):
-        # Karena fungsi kamu hanya menerima 1 argumen (self), panggil TANPA isi kurung:
-        xgb_service.load_model() 
-    elif hasattr(xgb_service, 'load'):
-        xgb_service.load()
-    else:
-        # Jika cara di atas masih gagal, bypass langsung menggunakan pickle bawaan Python
-        import pickle
-        with open(row_model['file_path'], 'rb') as f:
-            xgb_service.model = pickle.load(f)
-    # ====================================================================
 
-    # Pastikan sekali lagi model tidak None sebelum masuk looping
-    if xgb_service.model is None:
-        return False, f"Gagal memuat file binary model untuk versi {versi_model}."
-        
-    all_forecasts = []
-    
-    # Lakukan looping forecast per variasi produk
-    # Lakukan looping forecast per variasi produk
-    for variasi in df["variasi_encoded"].unique():
-        df_var = df[df["variasi_encoded"] == variasi].copy()
-
-        if len(df_var) < 4:
-            continue
-
-        # Jalankan forecast (sekarang sudah menggunakan fungsi baru yang aman)
-        forecast = xgb_service.forecast(df_var, n_weeks)
-        nama_variasi = df_var.iloc[0]["nama_variasi"]
-        last_week = df_var.iloc[-1]["minggu_ke"]
-        last_year = df_var.iloc[-1]["tahun"]
-
-        all_forecasts.append({
-            "nama_variasi": nama_variasi,
-            "forecast": float(forecast[0])
-        })
-
-        # ====================================================================
-        # CATATAN ID_BUKU: 
-        # Jika 'variasi' di sini adalah index encoding (0, 1, 2...), pastikan 
-        # tabel 'buku' kamu juga menggunakan index yang sama. Jika tabel 'buku' 
-        # menggunakan ID asli SQLite (1, 2, 3...), kamu perlu memetakan 
-        # kembali 'variasi' ke ID buku asli sebelum disimpan ke database.
-        # ====================================================================
-        db_service.save_prediction(
-            forecast,
-            start_week=last_week + 1,
-            start_year=last_year,
-            model_versi=versi_model,
-            id_buku=int(variasi) 
-        )
-    # for variasi in df["variasi_encoded"].unique():
-    #     df_var = df[df["variasi_encoded"] == variasi].copy()
-
-    #     if len(df_var) < 4:
-    #         continue
-
-    #     # Jalankan forecast
-    #     forecast = xgb_service.forecast(df_var, n_weeks)
-    #     nama_variasi = df_var.iloc[0]["nama_variasi"]
-    #     last_week = df_var.iloc[-1]["minggu_ke"]
-    #     last_year = df_var.iloc[-1]["tahun"]
-
-    #     all_forecasts.append({
-    #         "nama_variasi": nama_variasi,
-    #         "forecast": float(forecast[0])
-    #     })
-
-    #     # Simpan hasil prediksi ke DB
-    #     db_service.save_prediction(
-    #         forecast,
-    #         start_week=last_week + 1,
-    #         start_year=last_year,
-    #         model_versi=versi_model,
-    #         id_buku=variasi
-    #     )
-        
-    # return True, all_forecasts
+    return True, all_forecasts

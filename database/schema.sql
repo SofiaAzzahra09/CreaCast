@@ -137,7 +137,9 @@ CREATE TABLE IF NOT EXISTS model_registry (
 
     status TEXT DEFAULT 'nonaktif', -- aktif/nonaktif
 
-    catatan TEXT
+    catatan TEXT,
+    chart_json TEXT,
+    forecast_weeks INTEGER DEFAULT 4
 );
 
 -- ==========================================

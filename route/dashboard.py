@@ -21,6 +21,7 @@ def dashboard():
     df = db.get_weekly_sales()
 
     df_buku = db.get_all_buku()
+    raw_df = db.get_raw_transactions()
 
     # =====================================================
     # FALLBACK KOLOM
@@ -138,7 +139,21 @@ def dashboard():
     daily_labels = []
     daily_values = []
 
-    if "weekday" in df.columns:
+    if not raw_df.empty:
+
+        raw_df["waktu_pesanan_dibuat"] = pd.to_datetime(
+            raw_df["waktu_pesanan_dibuat"],
+            errors="coerce"
+        )
+
+        raw_df = raw_df.dropna(
+            subset=["waktu_pesanan_dibuat"]
+        )
+
+        raw_df["weekday"] = (
+            raw_df["waktu_pesanan_dibuat"]
+            .dt.weekday
+        )
 
         hari_map = {
             0: "Senin",
@@ -151,22 +166,25 @@ def dashboard():
         }
 
         daily_df = (
-            df.groupby("weekday")["net_jumlah"]
-            .sum()
-            .reset_index()
+            raw_df.groupby("weekday")
+            .size()
+            .reset_index(name="total")
         )
 
-        daily_df["hari"] = daily_df[
-            "weekday"
-        ].map(hari_map)
+        daily_df["hari"] = (
+            daily_df["weekday"]
+            .map(hari_map)
+        )
 
-        daily_labels = daily_df[
-            "hari"
-        ].tolist()
+        daily_labels = (
+            daily_df["hari"]
+            .tolist()
+        )
 
-        daily_values = daily_df[
-            "net_jumlah"
-        ].tolist()
+        daily_values = (
+            daily_df["total"]
+            .tolist()
+        )
 
     # =====================================================
     # STOK MENIPIS

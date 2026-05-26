@@ -109,7 +109,7 @@
         <table class="custom-table table table-hover v-align-middle">
             <thead class="table-light">
                 <tr>
-                    <th scope="col" class="py-3">Judul Produk</th>
+                    <th scope="col" class="py-3">Judul Variasi</th>
                     <th scope="col" class="py-3 text-center" style="width: 150px;">Sisa Stok</th>
                 </tr>
             </thead>
@@ -244,17 +244,25 @@ new Chart(document.getElementById('lowChart'), {
     }
 });
 
-// 4. DAILY SALES (Doughnut Chart - Lebih modern daripada Pie biasa)
+// 4. DAILY SALES (Weekday vs Weekend)
 new Chart(document.getElementById('dailyChart'), {
-    type: 'doughnut',
+    type: 'bar',
     data: {
         labels: {{ daily_labels|tojson }},
         datasets: [{
+            label: 'Total Penjualan',
             data: {{ daily_values|tojson }},
-            backgroundColor: [colors.blue.solid, colors.green.solid, colors.teal, colors.orange, colors.purple, '#fd7e14', '#20c997'],
-            borderWidth: 2,
-            borderColor: '#ffffff',
-            hoverOffset: 4
+            backgroundColor: [
+                '#4e73df', // Senin
+                '#4e73df', // Selasa
+                '#4e73df', // Rabu
+                '#4e73df', // Kamis
+                '#4e73df', // Jumat
+                '#f6c23e', // Sabtu
+                '#e74a3b'  // Minggu
+            ],
+            borderRadius: 8,
+            borderSkipped: false
         }]
     },
     options: {
@@ -262,11 +270,29 @@ new Chart(document.getElementById('dailyChart'), {
         maintainAspectRatio: false,
         plugins: {
             legend: {
-                position: 'right',
-                labels: { boxWidth: 15, padding: 15 }
+                display: false
+            },
+            tooltip: {
+                callbacks: {
+                    label: function(context) {
+                        return 'Penjualan: ' + context.raw;
+                    }
+                }
             }
         },
-        cutout: '70%' // Membuat bagian tengah lingkaran kosong proporsional
+        scales: {
+            x: {
+                grid: {
+                    display: false
+                }
+            },
+            y: {
+                beginAtZero: true,
+                grid: {
+                    color: 'rgba(0,0,0,0.05)'
+                }
+            }
+        }
     }
 });
 </script>

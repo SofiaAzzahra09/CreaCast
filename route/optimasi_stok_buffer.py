@@ -1,4 +1,6 @@
-from flask import Blueprint, render_template, make_response
+# route/optimasi_stok.py
+
+from flask import Blueprint, render_template, request, make_response
 import io
 
 from services.database_service import DatabaseService
@@ -16,7 +18,12 @@ db = DatabaseService()
 @optimasi_stok_bp.route("/", methods=["GET"])
 def index():
 
-    optimizer = StockOptimizer()
+    # =============================
+    # PARAMETER
+    # =============================
+    buffer_stok = request.args.get("buffer_stok", default=5, type=int)
+
+    optimizer = StockOptimizer(buffer_stok)
 
     # =============================
     # DATA
@@ -28,14 +35,16 @@ def index():
         return render_template(
             "optimasi_stok/index.html",
             data=[],
-            warning="Data buku kosong"
+            warning="Data buku kosong",
+            buffer_stok=buffer_stok
         )
 
     if df_prediksi.empty:
         return render_template(
             "optimasi_stok/index.html",
             data=[],
-            warning="Belum ada hasil prediksi"
+            warning="Belum ada hasil prediksi",
+            buffer_stok=buffer_stok
         )
 
     # =============================
@@ -46,39 +55,18 @@ def index():
         df_prediksi
     )
 
-    # =============================
-    # FORMAT & SORT
-    # =============================
+    # Pastikan data tidak kosong sebelum di-format dan di-sort
     if not hasil.empty:
-
-        kolom_produk = (
-            "kategori"
-            if "kategori" in hasil.columns
-            else "nama_produk"
-        )
-
-        kolom_variasi = (
-            "judul"
-            if "judul" in hasil.columns
-            else "nama_variasi"
-        )
+        # Deteksi nama kolom (bisa kategori/nama_produk dan judul/nama_variasi)
+        kolom_produk = "kategori" if "kategori" in hasil.columns else "nama_produk"
+        kolom_variasi = "judul" if "judul" in hasil.columns else "nama_variasi"
 
         if kolom_produk in hasil.columns:
-            hasil[kolom_produk] = (
-                hasil[kolom_produk]
-                .astype(str)
-                .str.strip()
-                .str.title()
-            )
-
+            hasil[kolom_produk] = hasil[kolom_produk].astype(str).str.strip().str.title()
         if kolom_variasi in hasil.columns:
-            hasil[kolom_variasi] = (
-                hasil[kolom_variasi]
-                .astype(str)
-                .str.strip()
-                .str.title()
-            )
+            hasil[kolom_variasi] = hasil[kolom_variasi].astype(str).str.strip().str.title()
 
+        # Sort Produk A-Z, lalu Variasi A-Z
         hasil = hasil.sort_values(
             by=[kolom_produk, kolom_variasi],
             ascending=[True, True]
@@ -89,14 +77,17 @@ def index():
     return render_template(
         "optimasi_stok/index.html",
         data=data,
-        warning=None
+        warning=None,
+        buffer_stok=buffer_stok
     )
 
 
 @optimasi_stok_bp.route("/download")
 def download_csv():
 
-    optimizer = StockOptimizer()
+    buffer_stok = request.args.get("buffer_stok", default=5, type=int)
+
+    optimizer = StockOptimizer(buffer_stok)
 
     df_buku = db.get_all_buku()
     df_prediksi = db.get_latest_prediction()
@@ -112,10 +103,7 @@ def download_csv():
 
     response = make_response(output.getvalue())
 
-    response.headers["Content-Disposition"] = (
-        "attachment; filename=optimasi_stok.csv"
-    )
-
+    response.headers["Content-Disposition"] = "attachment; filename=optimasi_stok.csv"
     response.headers["Content-type"] = "text/csv"
 
     return response
